@@ -1,8 +1,12 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View, useColorScheme } from 'react-native'
 import React from 'react'
 import { Link } from 'expo-router'
+import { Colors } from "../components/Colors"
 
 const BookEvent = () => {
+    const colorScheme = useColorScheme()
+    const theme = Colors[colorScheme] ?? Colors.dark
+    
   return (
     <View style = {styles.container}>
         <Text style = {styles.title}>Book Event</Text>

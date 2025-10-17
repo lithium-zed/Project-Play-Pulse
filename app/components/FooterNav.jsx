@@ -44,7 +44,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15
   },
   button: {
     flex: 1,

@@ -1,17 +1,25 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text, View, useColorScheme} from 'react-native'
 import React from 'react'
 import {Link} from 'expo-router'
+import { Colors } from "../components/Colors"
 
 const Home = () => {
+    const colorScheme = useColorScheme()
+    const theme = Colors[colorScheme] ?? Colors.dark
+
   return (
-    <View style = {styles.container}>
+    <View style = {[styles.container, {backgroundColor: theme.background}]}>
 
-      <Text style = {styles.title}>Hello World</Text>
-      <Text> 2nd line</Text>
+      <Text style = {[styles.title,{color: theme.text}]}>Events</Text>
+      <Text style = {[styles.title,{color: theme.text}]}> 2nd line</Text>
 
-        <View style = {styles.card}>
-            <Text>Placeholder</Text>
+        <View style = {[styles.card,{backgroundColor: theme.primary}]}>
+            <Text style = {[styles.title,{color: theme.text}]}>Placeholder_Live</Text>
         </View>
+        <View style = {[styles.card,{backgroundColor: theme.secondary}]}>
+            <Text style = {[styles.title,{color: theme.text}]}>Placeholder_Upcoming</Text>
+        </View>
+    
     
         
     </View>
