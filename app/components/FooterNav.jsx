@@ -2,6 +2,7 @@ import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useSegments } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { Colors } from "../../components/Colors"
 
 export default function FooterNav() {
@@ -24,13 +25,45 @@ export default function FooterNav() {
     // compute theme-aware styles so they reliably override static styles
     <SafeAreaView edges={["bottom"]} style={[styles.safeArea, { backgroundColor: theme.background }]}> 
       <View style={[styles.container, { borderTopColor: theme.accent, backgroundColor: theme.accent }]}> 
-        <TouchableOpacity style={styles.button} onPress={() => navigate('/') }>
-          <Text style={[styles.label, { color: theme.text }, isActive('/') && { color: theme.secondary, fontWeight: '600' }]}>Home</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigate('/') }
+          accessibilityLabel="Home"
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isActive('/') ? 'home' : 'home-outline'}
+            size={24}
+            color={isActive('/') ? theme.secondary : theme.text}
+          />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.button} onPress={() => navigate('/book') }>
-          <Text style={[styles.label, { color: theme.text }, isActive('/book') && { color: theme.secondary, fontWeight: '600' }]}>Book</Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigate('/book') }
+          accessibilityLabel="Book"
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isActive('/book') ? 'add-circle' : 'add-circle-outline'}
+            size={24}
+            color={isActive('/book') ? theme.secondary : theme.text}
+          />
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigate('/profile') }
+          accessibilityLabel="Profile"
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isActive('/profile') ? 'person' : 'person-outline'}
+            size={24}
+            color={isActive('/profile') ? theme.secondary : theme.text}
+          />
+        </TouchableOpacity>
+
       </View>
     </SafeAreaView>
   )
@@ -44,8 +77,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15
+    borderRadius: 15
   },
   button: {
     flex: 1,

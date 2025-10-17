@@ -8,10 +8,10 @@ const BookEvent = () => {
     const theme = Colors[colorScheme] ?? Colors.dark
     
   return (
-    <View style = {styles.container}>
-        <Text style = {styles.title}>Book Event</Text>
-        <View style = {styles.card}>
-            <Text>Placeholder</Text>
+    <View style = {[styles.container, {backgroundColor: theme.background}]}>
+        <Text style = {[styles.title,{color: theme.text}]}>Book Event</Text>
+        <View style = {[styles.card,{backgroundColor: theme.accent}]}>
+            <Text style = {[styles.title,{color: theme.text}]}>Placeholder</Text>
         </View>
     
       
