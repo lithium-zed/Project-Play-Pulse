@@ -2,7 +2,7 @@ import React from 'react'
 import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useSegments } from 'expo-router'
-import { Colors } from "./Colors"
+import { Colors } from "../../components/Colors"
 
 export default function FooterNav() {
 
@@ -23,13 +23,13 @@ export default function FooterNav() {
   return (
     // compute theme-aware styles so they reliably override static styles
     <SafeAreaView edges={["bottom"]} style={[styles.safeArea, { backgroundColor: theme.background }]}> 
-      <View style={[styles.container, { borderTopColor: theme.secondary, backgroundColor: theme.background }]}> 
+      <View style={[styles.container, { borderTopColor: theme.accent, backgroundColor: theme.accent }]}> 
         <TouchableOpacity style={styles.button} onPress={() => navigate('/') }>
-          <Text style={[styles.label, { color: theme.text }, isActive('/') && { color: theme.accent, fontWeight: '600' }]}>Home</Text>
+          <Text style={[styles.label, { color: theme.text }, isActive('/') && { color: theme.secondary, fontWeight: '600' }]}>Home</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.button} onPress={() => navigate('/book') }>
-          <Text style={[styles.label, { color: theme.text }, isActive('/book') && { color: theme.accent, fontWeight: '600' }]}>Book</Text>
+          <Text style={[styles.label, { color: theme.text }, isActive('/book') && { color: theme.secondary, fontWeight: '600' }]}>Book</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

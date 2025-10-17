@@ -2,7 +2,6 @@ import { StyleSheet, Text, useColorScheme, View } from 'react-native'
 import React from 'react'
 import { Slot } from 'expo-router'
 import FooterNav from './components/FooterNav'
-import { Colors } from "./components/Colors"
 
 const RootLayout = () => {
     
