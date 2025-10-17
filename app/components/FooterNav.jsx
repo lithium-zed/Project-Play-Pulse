@@ -1,11 +1,15 @@
 import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useSegments } from 'expo-router'
+import { Colors } from "./Colors"
 
 export default function FooterNav() {
+
   const router = useRouter()
   const segments = useSegments()
+  const colorScheme = useColorScheme()
+  const theme = Colors[colorScheme] ?? Colors.dark
 
   const navigate = (to) => {
     router.push(to)
@@ -17,15 +21,16 @@ export default function FooterNav() {
   }
 
   return (
-    <SafeAreaView edges={["bottom"]} style={styles.safeArea}>
-      <View style={styles.container}>
-      <TouchableOpacity style={styles.button} onPress={() => navigate('/') }>
-        <Text style={[styles.label, isActive('/') && styles.active]}>Home</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity style={styles.button} onPress={() => navigate('/book') }>
-        <Text style={[styles.label, isActive('/book') && styles.active]}>Book</Text>
-      </TouchableOpacity>
+    // compute theme-aware styles so they reliably override static styles
+    <SafeAreaView edges={["bottom"]} style={[styles.safeArea, { backgroundColor: theme.background }]}> 
+      <View style={[styles.container, { borderTopColor: theme.secondary, backgroundColor: theme.background }]}> 
+        <TouchableOpacity style={styles.button} onPress={() => navigate('/') }>
+          <Text style={[styles.label, { color: theme.text }, isActive('/') && { color: theme.accent, fontWeight: '600' }]}>Home</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.button} onPress={() => navigate('/book') }>
+          <Text style={[styles.label, { color: theme.text }, isActive('/book') && { color: theme.accent, fontWeight: '600' }]}>Book</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   )
@@ -39,8 +44,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#ddd',
-    backgroundColor: '#fff'
+    
   },
   button: {
     flex: 1,
@@ -48,14 +52,13 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    color: '#444'
+    
   },
   active: {
-    color: '#007AFF',
     fontWeight: '600'
   }
   ,
   safeArea: {
-    backgroundColor: '#fff'
+
   }
 })

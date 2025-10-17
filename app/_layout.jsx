@@ -2,10 +2,11 @@ import { StyleSheet, Text, useColorScheme, View } from 'react-native'
 import React from 'react'
 import { Slot } from 'expo-router'
 import FooterNav from './components/FooterNav'
+import { Colors } from "./components/Colors"
 
 const RootLayout = () => {
-    const colorScheme = useColorScheme()
     
+
   return (
     <View style={{ flex: 1 }}>
       {/* Slot renders the child screens from the file-based router; make it grow */}
