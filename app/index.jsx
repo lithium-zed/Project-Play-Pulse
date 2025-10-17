@@ -5,9 +5,15 @@ const Home = () => {
   return (
     <View style = {styles.container}>
 
-      <Text>Hello World</Text>
+      <Text style = {styles.title}>Hello World</Text>
+      <Text> 2nd line</Text>
+
+        <View style = {styles.card}>
+            <Text> A card</Text>
+        </View>
 
     </View>
+    
   )
 }
 
@@ -18,5 +24,15 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center'
+    },
+    card : {
+        backgroundColor: '#eee',
+        padding: 20,
+        borderRadius: 10,
+        boxShadow: '4px 4px rgba(0,0,0,0.1)'
+    },
+    title: {
+        fontWeight: 'bold',
+        fontSize: 25
     }
 })
