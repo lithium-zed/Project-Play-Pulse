@@ -7,8 +7,7 @@ const BookEvent = () => {
     <View style = {styles.container}>
         <Text style = {styles.title}>Book Event</Text>
         <View style = {styles.card}>
-            
-            <Link href = "/">Home</Link>
+            <Text>Placeholder</Text>
         </View>
     
       

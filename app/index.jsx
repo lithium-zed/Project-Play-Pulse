@@ -10,7 +10,7 @@ const Home = () => {
       <Text> 2nd line</Text>
 
         <View style = {styles.card}>
-            <Link href = "/book">Book Event</Link>
+            <Text>Placeholder</Text>
         </View>
     
         
