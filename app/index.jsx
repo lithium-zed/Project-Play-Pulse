@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react'
+import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { 
   StyleSheet, 
@@ -32,7 +33,8 @@ const Home = () => {
       date: '10/17/2025', 
       host: 'John Smith',
       tag: 'MUSIC',
-      access: 'public'
+      access: 'public',
+      participants: { current: 0, max: 10 }
     },
     { 
       id: '2', 
@@ -40,7 +42,8 @@ const Home = () => {
       date: '10/17/2025', 
       host: 'Sarah Wilson',
       tag: 'MUSIC',
-      access: 'public'
+      access: 'public',
+      participants: { current: 0, max: 10 }
     },
     { 
       id: '3', 
@@ -51,6 +54,7 @@ const Home = () => {
       host: 'Maria Garcia',
       tag: 'ART',
       access: 'public'
+  
     },
     { 
       id: '4', 
@@ -58,7 +62,8 @@ const Home = () => {
       date: '10/16/2025', 
       host: 'Alex Chen',
       tag: 'TECH',
-      access: 'private'
+      access: 'private',
+      participants: { current: 0, max: 10 }
     },
     { 
       id: '5', 
@@ -69,13 +74,14 @@ const Home = () => {
       host: 'Emma Williams',
       tag: 'BOOK',
       access: 'private'
+     
     }
   ])
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [modalVisible, setModalVisible] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [joinedEvents, setJoinedEvents] = useState({})
-  const [isLoggedin, setIsloggedin] = useState(false)
+
   
 
   // Date helpers
@@ -116,15 +122,19 @@ const Home = () => {
     }
   }
 const [isLoggedIn,setIsLoggedIn] = useState(false);
-  useEffect(() => {
-const checklogin = async () =>{
-  const userToken = await AsyncStorage.getItem('usertoken');
-  setIsLoggedIn(userToken !== null);
-}
-checklogin();
-
-  },[modalVisible])
-
+useEffect(() => {
+  const checkLogin = async () => {
+    try {
+      // match the key used in your login screen (userToken)
+      const userToken = await AsyncStorage.getItem('userToken');
+      setIsLoggedIn(!!userToken);
+    } catch (e) {
+      console.error('Error checking login:', e);
+      setIsLoggedIn(false);
+    }
+  }
+  checkLogin();
+}, [modalVisible])
   // Event handlers
   const openEvent = (event) => {
     setSelectedEvent(event)
@@ -191,11 +201,11 @@ checklogin();
   }
 
   const refreshEvents = useCallback(() => {
-    setRefreshing(true)
-    setTimeout(() => {
-      setRefreshing(false)
-    }, 1000)
-  }, [])
+  setRefreshing(true)
+  setTimeout(() => {
+    setRefreshing(false)
+  }, 1000)
+}, [modalVisible])
 
   // Status color helper
   const getStatusColor = (ev) => {
