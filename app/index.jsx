@@ -75,6 +75,8 @@ const Home = () => {
   const [modalVisible, setModalVisible] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [joinedEvents, setJoinedEvents] = useState({})
+  const [isLoggedin, setIsloggedin] = useState(false)
+  
 
   // Date helpers
   const today = new Date()
@@ -113,6 +115,15 @@ const Home = () => {
       console.log('Error saving joined events:', error)
     }
   }
+const [isLoggedIn,setIsLoggedIn] = useState(false);
+  useEffect(() => {
+const checklogin = async () =>{
+  const userToken = await AsyncStorage.getItem('usertoken');
+  setIsLoggedIn(userToken !== null);
+}
+checklogin();
+
+  },[modalVisible])
 
   // Event handlers
   const openEvent = (event) => {
@@ -291,33 +302,48 @@ const Home = () => {
                   </Text>
                 ) : null}
                 
-                <View style={modalStyles.buttonsRow}>
-                  {joinedEvents[selectedEvent?.id] ? (
-                    <TouchableOpacity 
-                      style={modalStyles.leaveBtn} 
-                      onPress={leaveEvent}
-                    >
-                      <Text style={modalStyles.leaveBtnText}>Leave</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity 
-                      style={[
-                        modalStyles.joinBtn,
-                        (!selectedEvent?.participants || 
-                         selectedEvent.participants.current >= selectedEvent.participants.max) && 
-                        modalStyles.disabledButton
-                      ]} 
-                      onPress={joinEvent}
-                      disabled={!selectedEvent?.participants || 
-                               selectedEvent.participants.current >= selectedEvent.participants.max}
-                    >
-                      <Text style={modalStyles.joinBtnText}>Join</Text>
-                    </TouchableOpacity>
-                  )}
-                  <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
-                    <Text style={modalStyles.closeBtnText}>Close</Text>
-                  </TouchableOpacity>
-                </View>
+               <View style={modalStyles.buttonsRow}>
+  {joinedEvents[selectedEvent?.id] ? (
+    <TouchableOpacity 
+      style={modalStyles.leaveBtn} 
+      onPress={() => {
+        if (!isLoggedIn) {
+          Alert.alert('Login required', 'You must be logged in to leave an event');
+          return;
+        }
+        leaveEvent();
+      }}
+    >
+      <Text style={modalStyles.leaveBtnText}>Leave</Text>
+    </TouchableOpacity>
+  ) : (
+    <TouchableOpacity 
+      style={[
+        modalStyles.joinBtn,
+        (!selectedEvent?.participants || 
+         selectedEvent.participants.current >= selectedEvent.participants.max || 
+         !isLoggedIn) && 
+        modalStyles.disabledButton
+      ]} 
+      onPress={() => {
+        if (!isLoggedIn) {
+          Alert.alert('Login required', 'You must be logged in to join an event');
+          return;
+        }
+        joinEvent();
+      }}
+      disabled={!selectedEvent?.participants || 
+               selectedEvent.participants.current >= selectedEvent.participants.max || 
+               !isLoggedIn}
+    >
+      <Text style={modalStyles.joinBtnText}>Join</Text>
+    </TouchableOpacity>
+  )}
+  <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
+    <Text style={modalStyles.closeBtnText}>Close</Text>
+  </TouchableOpacity>
+</View>
+
               </View>
             </Pressable>
           </Pressable>
