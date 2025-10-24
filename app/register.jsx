@@ -1,5 +1,5 @@
 // app/register.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../components/Colors'
@@ -11,13 +11,38 @@ const Register = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [usernameError, setUsernameError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const colorScheme = useColorScheme()
   const theme = Colors[colorScheme] ?? Colors.dark
+
+  // Inline validation: run on field changes
+  useEffect(() => {
+    const trimmed = username.trim()
+    if (!trimmed) setUsernameError('')
+    else if (trimmed.length < 6) setUsernameError('Username must be at least 6 characters')
+    else if (trimmed.length > 30) setUsernameError('Username must be at most 30 characters')
+    else setUsernameError('')
+  }, [username])
+
+  useEffect(() => {
+    const val = email.trim()
+    if (!val) { setEmailError('') ; return }
+    const emailRe = /^[\w.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+    setEmailError(emailRe.test(val) ? '' : 'Invalid email address')
+  }, [email])
+
+  useEffect(() => {
+    if (!password) { setPasswordError('') ; return }
+    setPasswordError(password.length >= 8 ? '' : 'Password must be at least 8 characters')
+  }, [password])
 
   const handleRegister = async () => {
     const trimmedUsername = username.trim()
     const trimmedEmail = email.trim()
 
+    // final check before submit; components also validate inline
     if (!trimmedUsername || !trimmedEmail || !password) {
       Alert.alert('Error', 'Please fill in all fields')
       return
@@ -72,6 +97,7 @@ const Register = () => {
         value={username}
         onChangeText={setUsername}
       />
+      {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
 
       <TextInput
         style={[styles.input, { borderColor: theme.primary, color: theme.text, backgroundColor: theme.background }]}
@@ -81,6 +107,7 @@ const Register = () => {
         onChangeText={setEmail}
         keyboardType="email-address"
       />
+      {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
       <TextInput
         style={[styles.input, { borderColor: theme.primary, color: theme.text, backgroundColor: theme.background }]}
@@ -90,8 +117,9 @@ const Register = () => {
         onChangeText={setPassword}
         secureTextEntry
       />
+      {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
-      <Button title="Submit" onPress={handleRegister} color={theme.accent} />
+      <Button title="Submit" onPress={handleRegister} color={theme.accent} disabled={Boolean(usernameError || emailError || passwordError)} />
     </View>
   );
 };
@@ -115,5 +143,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 10,
     marginBottom: 15,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 12,
   },
 });
