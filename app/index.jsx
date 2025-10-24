@@ -100,6 +100,7 @@ const Home = () => {
   // Load joined events from AsyncStorage
   useEffect(() => {
     loadJoinedEvents()
+    loadSavedEvents()
   }, [])
 
   const loadJoinedEvents = async () => {
@@ -110,6 +111,34 @@ const Home = () => {
       }
     } catch (error) {
       console.log('Error loading joined events:', error)
+    }
+  }
+
+  const loadSavedEvents = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('events')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        // normalize stored events to match expected shape
+        const normalized = parsed.map((e) => ({
+          id: e.id ?? Date.now().toString(),
+          title: e.title || 'Untitled',
+          date: e.date || '',
+          host: e.hostName || e.host || 'Unknown',
+          tag: (e.category || e.tag || '').toUpperCase(),
+          access: e.status === 'private' ? 'private' : (e.access || 'public'),
+          participants: { current: 0, max: (typeof e.participants === 'number' ? e.participants : (e.participants?.max ?? 10)) },
+          description: e.description || ''
+        }))
+        // prepend saved events so newest are first but avoid duplicate ids
+        setEvents((prev) => {
+          const existingIds = new Set(prev.map(p => p.id))
+          const toAdd = normalized.filter(n => !existingIds.has(n.id))
+          return [...toAdd, ...prev]
+        })
+      }
+    } catch (error) {
+      console.log('Error loading saved events:', error)
     }
   }
 
