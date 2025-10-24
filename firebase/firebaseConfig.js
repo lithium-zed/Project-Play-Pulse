@@ -1,6 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore, collection, getDocs } from 'firebase/firestore/lite';
+import { getDatabase } from "firebase/database";
+import { getAuth } from "firebase/auth";
 // Optionally import the services that you want to use
 // import {...} from 'firebase/auth';
 // import {...} from 'firebase/database';
@@ -24,10 +26,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const db = getFirestore(app);
+const database = getDatabase(app);
+const getAuthApp = getAuth(app);
 
-async function getCities(db) {
-  const citiesCol = collection(db, 'cities');
-  const citySnapshot = await getDocs(citiesCol);
-  const cityList = citySnapshot.docs.map(doc => doc.data());
-  return cityList;
-}
+export { app, analytics, db, database, getAuthApp };
