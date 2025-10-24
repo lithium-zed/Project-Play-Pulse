@@ -1,16 +1,17 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  useColorScheme, 
-  Modal, 
-  Pressable, 
-  TouchableOpacity, 
+import {
+  StyleSheet,
+  Text,
+  View,
+  useColorScheme,
+  Modal,
+  Pressable,
+  TouchableOpacity,
   RefreshControl,
-  SectionList 
+  SectionList,
+  TextInput
 } from 'react-native'
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'
 import { Colors } from "../components/Colors"
@@ -34,13 +35,14 @@ const Home = () => {
     { id: '1', title: 'Live Concert', date: '10/24/2025', host: 'John Smith', tag: 'MUSIC', access: 'public', participants: { current: 0, max: 10 } },
     { id: '2', title: 'Live Concert', date: '10/24/2025', host: 'Sarah Wilson', tag: 'MUSIC', access: 'public', participants: { current: 0, max: 10 } },
     { id: '3', title: 'Art Expo', date: '10/25/2025', participants: { current: 5, max: 15 }, description: 'An immersive art exhibition featuring local artists.', host: 'Maria Garcia', tag: 'ART', access: 'public' },
-    { id: '4', title: 'Tech Talk', date: '10/25/2025', host: 'Alex Chen', tag: 'TECH', access: 'private', participants: { current: 0, max: 10 } },
-    { id: '5', title: 'Book Club', date: '10/25/2025', participants: { current: 9, max: 10 }, description: 'Join us for an engaging discussion.', host: 'Emma Williams', tag: 'BOOK', access: 'private' }
+    { id: '4', title: 'Tech Talk', date: '10/25/2025', host: 'Alex Chen', tag: 'TECH', access: 'private', participants: { current: 0, max: 10 }, inviteCode: 'TECH2025' },
+    { id: '5', title: 'Book Club', date: '10/25/2025', participants: { current: 9, max: 10 }, description: 'Join us for an engaging discussion.', host: 'Emma Williams', tag: 'BOOK', access: 'private', inviteCode: 'BOOKCLUB' }
   ]
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [modalVisible, setModalVisible] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [joinedEvents, setJoinedEvents] = useState({})
+  const [inviteCode, setInviteCode] = useState('')
 
   
 
@@ -88,7 +90,8 @@ const Home = () => {
           tag: (e.category || e.tag || '').toUpperCase(),
           access: e.status === 'private' ? 'private' : (e.access || 'public'),
           participants: { current: 0, max: (typeof e.participants === 'number' ? e.participants : (e.participants?.max ?? 10)) },
-          description: e.description || ''
+          description: e.description || '',
+          inviteCode: e.inviteCode || e.invitationCode || null
         }))
         // Replace events with stored (newest first)
         setEvents(normalized)
@@ -126,6 +129,7 @@ useEffect(() => {
   // Event handlers
   const openEvent = (event) => {
     setSelectedEvent(event)
+    setInviteCode('')
     setModalVisible(true)
   }
 
@@ -134,23 +138,34 @@ useEffect(() => {
     setSelectedEvent(null)
   }
 
-  const handleBackdropPress = (event) => {
-    if (event.target === event.currentTarget) {
-      closeEvent()
-    }
+  const handleBackdropPress = () => {
+    closeEvent()
   }
 
   const joinEvent = async () => {
-    if (!selectedEvent?.participants) return
-    
+    if (!selectedEvent) return
+    if (!selectedEvent.participants) return
+
+    // Check if private event and invite code is required
+    if (selectedEvent.access === 'private') {
+      if (!inviteCode.trim()) {
+        Alert.alert('Invite code required', 'Please enter the invite code for this private event.')
+        return
+      }
+      if (selectedEvent.inviteCode && inviteCode.trim().toUpperCase() !== selectedEvent.inviteCode.toUpperCase()) {
+        Alert.alert('Invalid invite code', 'The invite code you entered is incorrect. Please try again.')
+        return
+      }
+    }
+
     const updatedEvents = events.map(ev =>
       ev.id === selectedEvent.id
-        ? { 
-            ...ev, 
-            participants: { 
-              current: Math.min(ev.participants.current + 1, ev.participants.max), 
-              max: ev.participants.max 
-            } 
+        ? {
+            ...ev,
+            participants: {
+              current: Math.min(ev.participants.current + 1, ev.participants.max),
+              max: ev.participants.max
+            }
           }
         : ev
     )
@@ -266,15 +281,14 @@ useEffect(() => {
         />
 
         {/* Event details modal */}
-        <Modal 
-          visible={modalVisible} 
-          animationType="slide" 
-          transparent={true} 
+        <Modal
+          visible={modalVisible}
+          animationType="slide"
+          transparent={true}
           onRequestClose={closeEvent}
         >
           <Pressable style={modalStyles.backdrop} onPress={handleBackdropPress}>
-            <Pressable>
-              <View style={modalStyles.modal}>
+            <View style={[modalStyles.modal, { minHeight: selectedEvent?.access === 'private' && !joinedEvents[selectedEvent?.id] ? 360 : 295 }]}>
                 <View style={modalStyles.header}>
                   <View 
                     style={[
@@ -293,7 +307,18 @@ useEffect(() => {
                     Participants {selectedEvent.participants.current}/{selectedEvent.participants.max}
                   </Text>
                 ) : null}
-                
+                {selectedEvent?.access === 'private' && !joinedEvents[selectedEvent?.id] ? (
+                  <TextInput
+                    style={modalStyles.inviteInput}
+                    placeholder={isLoggedIn ? "Enter invite code" : "Login required"}
+                    placeholderTextColor="#CCCCCC"
+                    value={inviteCode}
+                    onChangeText={setInviteCode}
+                    secureTextEntry={false}
+                    editable={isLoggedIn}
+                  />
+                ) : null}
+
                <View style={modalStyles.buttonsRow}>
   {joinedEvents[selectedEvent?.id] ? (
     <TouchableOpacity 
@@ -338,7 +363,6 @@ useEffect(() => {
 
               </View>
             </Pressable>
-          </Pressable>
         </Modal>
 
        </SafeAreaView>
@@ -384,7 +408,6 @@ useEffect(() => {
   modal: {
     position: 'relative',
     width: 249,
-    height: 295,
     backgroundColor: '#235AE9',
     borderRadius: 10,
     padding: 20,
@@ -469,5 +492,14 @@ useEffect(() => {
   },
   disabledButton: {
     opacity: 0.5
+  },
+  inviteInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    color: '#235AE9',
+    marginBottom: 16
   }
 })

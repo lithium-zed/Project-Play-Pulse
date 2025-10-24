@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { View, Text, Button, ScrollView, StyleSheet, TextInput, Alert, useColorScheme, Platform } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Colors } from '../components/Colors'
 
@@ -76,7 +77,7 @@ export default function DebugStorage() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}> 
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.background }]}>
       <Text style={[styles.title, { color: theme.text }]}>Debug AsyncStorage</Text>
 
       <View style={styles.row}>
@@ -102,7 +103,7 @@ export default function DebugStorage() {
       <ScrollView style={styles.dump} contentContainerStyle={{ padding: 12 }}>
         <Text style={[styles.dumpText, { color: theme.text }]}>{loading ? 'Loading…' : (dump || 'No dump yet. Press Refresh dump.')}</Text>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   )
 }
 
