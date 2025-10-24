@@ -1,9 +1,10 @@
 // app/register.js
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Colors } from '../components/Colors'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
 
 const Register = () => {
   const router = useRouter();
@@ -42,14 +43,21 @@ const Register = () => {
     }
 
     try {
-      const userData = { username: trimmedUsername, email: trimmedEmail, password }
-      await AsyncStorage.setItem('user', JSON.stringify(userData))
+      const auth = getAuthApp
+      const cred = await createUserWithEmailAndPassword(auth, trimmedEmail, password)
+      // set display name
+      try {
+        await updateProfile(cred.user, { displayName: trimmedUsername })
+      } catch (e) {
+        console.warn('Failed setting displayName', e)
+      }
 
       Alert.alert('Success', 'Registration complete!')
       router.replace('/profile')
     } catch (error) {
       console.error('Error saving user data:', error)
-      Alert.alert('Error', 'Failed to save user data')
+      const msg = error?.code ? error.code.replace('auth/', '').replace(/-/g, ' ') : 'Failed to save user data'
+      Alert.alert('Error', msg)
     }
   };
 

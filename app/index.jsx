@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { onAuthStateChanged } from 'firebase/auth'
 import {
   StyleSheet,
   Text,
@@ -41,13 +43,16 @@ const Home = () => {
   const [inviteCode, setInviteCode] = useState('')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // helper: current user email
+  // helper: current user email (prefer firebase currentUser, normalize to lowercase)
   const getCurrentUserEmail = async () => {
     try {
+      const auth = typeof getAuthApp === 'function' ? getAuthApp() : getAuthApp
+      const fu = auth?.currentUser
+      if (fu?.email) return String(fu.email).toLowerCase()
       const userData = await AsyncStorage.getItem('user')
       if (!userData) return null
       const parsed = JSON.parse(userData)
-      return parsed?.email ?? null
+      return parsed?.email ? String(parsed.email).toLowerCase() : null
     } catch (e) {
       console.warn('getCurrentUserEmail error', e)
       return null
@@ -142,6 +147,7 @@ const Home = () => {
     }
   }
 
+
   // check login state (based on token key used by your login screen)
   const checkLogin = async () => {
     try {
@@ -182,6 +188,35 @@ const Home = () => {
     check();
   }, [modalVisible])
 
+  // add auth subscription to keep isLoggedIn and storage in sync
+  useEffect(() => {
+    try {
+      const auth = typeof getAuthApp === 'function' ? getAuthApp() : getAuthApp
+      const unsub = onAuthStateChanged(auth, async (u) => {
+        try {
+          if (u) {
+            setIsLoggedIn(true)
+            // persist minimal user info for per-user keys
+            await AsyncStorage.setItem('user', JSON.stringify({ email: u.email, displayName: u.displayName }))
+            await AsyncStorage.setItem('userToken', 'loggedIn')
+            await loadJoinedEvents()
+          } else {
+            setIsLoggedIn(false)
+            setJoinedEvents({})
+            // clear stored user/token on sign-out
+            await AsyncStorage.removeItem('user')
+            await AsyncStorage.removeItem('userToken')
+          }
+        } catch (err) {
+          console.warn('onAuthStateChanged handler error', err)
+        }
+      })
+      return () => unsub()
+    } catch (e) {
+      console.warn('onAuthStateChanged subscription failed', e)
+    }
+  }, []) // run once
+
    useEffect(() => {
     if (!isLoggedIn) {
       setJoinedEvents({});
@@ -190,6 +225,7 @@ const Home = () => {
       loadJoinedEvents();
     }
   }, [isLoggedIn])
+
 
   const openEvent = (event) => {
     setSelectedEvent(event)
@@ -204,12 +240,18 @@ const Home = () => {
 
   const handleBackdropPress = () => closeEvent()
 
+  // guard duplicate joins/leaves and log actions (helps debug)
   const joinEvent = async () => {
     if (!selectedEvent) return
     if (!selectedEvent.participants) return
 
     if (!isLoggedIn) {
       Alert.alert('Login required', 'You must be logged in to join an event')
+      return
+    }
+
+    if (joinedEvents[selectedEvent.id]) {
+      Alert.alert('Already joined', 'You have already joined this event')
       return
     }
 
@@ -250,6 +292,11 @@ const Home = () => {
 
     if (!isLoggedIn) {
       Alert.alert('Login required', 'You must be logged in to leave an event')
+      return
+    }
+
+    if (!joinedEvents[selectedEvent.id]) {
+      Alert.alert('Not joined', 'You are not currently joined to this event')
       return
     }
 

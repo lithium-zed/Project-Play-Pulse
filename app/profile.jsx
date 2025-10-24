@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
 import { Colors } from '../components/Colors'
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 
 const Profile = () => {
   const router = useRouter();
@@ -13,34 +14,26 @@ const Profile = () => {
   const theme = Colors[colorScheme] ?? Colors.dark
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const token = await AsyncStorage.getItem('userToken');
-        if (token) {
-          const userData = await AsyncStorage.getItem('user');
-          if (userData) {
-            setUser(JSON.parse(userData));
-          }
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        console.error('Error fetching user:', error);
-      } finally {
-        setLoading(false);
+    const auth = getAuthApp
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser({ username: u.displayName || '', email: u.email })
+      } else {
+        setUser(null)
       }
-    };
-
-    fetchUser();
+      setLoading(false)
+    })
+    return () => unsub()
   }, []);
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('userToken');
-      setUser(null);
-      Alert.alert('Logged out', 'You have successfully logged out');
+      const auth = getAuthApp
+      await signOut(auth)
+      setUser(null)
+      Alert.alert('Logged out', 'You have successfully logged out')
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Logout error:', error)
     }
   };
 
