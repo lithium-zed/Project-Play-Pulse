@@ -2,13 +2,14 @@ import React from 'react'
 import { StyleSheet, View, Text, useColorScheme } from 'react-native'
 import { Colors } from '../../components/Colors'
 
-const EventCardLive = ({ title = 'Event Name', date = 'MM/DD/YYYY', tag = 'Tag' }) => {
+const EventCardLive = ({ title = 'Event Name', date = 'MM/DD/YYYY', tag = 'Tag', statusColor = null }) => {
 	const colorScheme = useColorScheme()
 	const theme = Colors[colorScheme] ?? Colors.dark
 
 	return (
 		<View style={[styles.card, { backgroundColor: theme.primary }]}> 
-			<View style={[styles.status, { backgroundColor: theme.status?.open ?? '#56F000' }]} />
+			{/* statusColor comes from parent (getStatusColor). Fall back to theme status or a green default */}
+			<View style={[styles.status, { backgroundColor: statusColor ?? theme.status?.open ?? '#56F000' }]} />
 
 			<View style={styles.content}>
 				<Text style={[styles.title, { color: theme.text }]}>{title}</Text>
