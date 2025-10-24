@@ -1,14 +1,17 @@
 // app/register.js
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import { Colors } from '../components/Colors'
 
 const Register = () => {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const colorScheme = useColorScheme()
+  const theme = Colors[colorScheme] ?? Colors.dark
 
   const handleRegister = async () => {
     if (!username || !email || !password) {
@@ -30,33 +33,36 @@ const Register = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Register</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }] }>
+      <Text style={[styles.title, { color: theme.text }]}>Register</Text>
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.primary, color: theme.text, backgroundColor: theme.background }]}
         placeholder="Username"
+        placeholderTextColor={theme.text}
         value={username}
         onChangeText={setUsername}
       />
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.primary, color: theme.text, backgroundColor: theme.background }]}
         placeholder="Email"
+        placeholderTextColor={theme.text}
         value={email}
         onChangeText={setEmail}
         keyboardType="email-address"
       />
 
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: theme.primary, color: theme.text, backgroundColor: theme.background }]}
         placeholder="Password"
+        placeholderTextColor={theme.text}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
       />
 
-      <Button title="Submit" onPress={handleRegister} />
+      <Button title="Submit" onPress={handleRegister} color={theme.accent} />
     </View>
   );
 };

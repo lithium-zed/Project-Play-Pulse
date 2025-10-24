@@ -30,7 +30,7 @@ const Home = () => {
     { 
       id: '1', 
       title: 'Live Concert', 
-      date: '10/17/2025', 
+      date: '10/19/2025', 
       host: 'John Smith',
       tag: 'MUSIC',
       access: 'public',
@@ -39,7 +39,7 @@ const Home = () => {
     { 
       id: '2', 
       title: 'Live Concert', 
-      date: '10/17/2025', 
+      date: '10/19/2025', 
       host: 'Sarah Wilson',
       tag: 'MUSIC',
       access: 'public',
@@ -48,7 +48,7 @@ const Home = () => {
     { 
       id: '3', 
       title: 'Art Expo', 
-      date: '10/18/2025',
+      date: '10/19/2025',
       participants: { current: 5, max: 15 }, 
       description: 'An immersive art exhibition featuring local artists.',
       host: 'Maria Garcia',
@@ -59,7 +59,7 @@ const Home = () => {
     { 
       id: '4', 
       title: 'Tech Talk', 
-      date: '10/16/2025', 
+      date: '10/19/2025', 
       host: 'Alex Chen',
       tag: 'TECH',
       access: 'private',
@@ -68,7 +68,7 @@ const Home = () => {
     { 
       id: '5', 
       title: 'Book Club', 
-      date: '10/20/2025',
+      date: '10/19/2025',
       participants: { current: 9, max: 10 }, // Changed from 3 to 9
       description: 'Join us for an engaging discussion.',
       host: 'Emma Williams',

@@ -1,6 +1,7 @@
 // app/profile.js
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, Alert } from 'react-native';
+import { View, Text, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
+import { Colors } from '../components/Colors'
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -8,6 +9,8 @@ const Profile = () => {
   const router = useRouter();
   const [user, setUser] = useState(null); 
   const [loading, setLoading] = useState(true);
+  const colorScheme = useColorScheme()
+  const theme = Colors[colorScheme] ?? Colors.dark
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -44,8 +47,8 @@ const Profile = () => {
   if (loading) return null; // or a spinner
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{user ? user.username : 'Welcome, Guest'}</Text>
+    <View style={[styles.container, { backgroundColor: theme.background }]}> 
+      <Text style={[styles.title, { color: theme.text }]}>{user ? user.username : 'Welcome, Guest'}</Text>
 
       {!user ? (
         <>
@@ -53,6 +56,7 @@ const Profile = () => {
             <Button
               title="Log In"
               onPress={() => router.push('/login')}
+              color={theme.accent}
             />
           </View>
 
@@ -60,12 +64,13 @@ const Profile = () => {
             <Button
               title="Register"
               onPress={() => router.push('/register')}
+              color={theme.accent}
             />
           </View>
         </>
       ) : (
         <View style={styles.buttonContainer}>
-          <Button title="Log Out" onPress={handleLogout} />
+          <Button title="Log Out" onPress={handleLogout} color={theme.accent} />
         </View>
       )}
     </View>
