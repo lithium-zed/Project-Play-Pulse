@@ -1,9 +1,10 @@
 // app/login.js
 import React, { useState } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Colors } from '../components/Colors'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 
 const Login = () => {
   const router = useRouter();
@@ -19,26 +20,17 @@ const Login = () => {
     }
 
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (!userData) {
-        Alert.alert('Error', 'No registered user found');
-        return;
-      }
-
-      const user = JSON.parse(userData);
-
-      if (email === user.email && password === user.password) {
-
-        await AsyncStorage.setItem('userToken', 'loggedIn');
-
-        Alert.alert('Success', `Welcome back, ${user.username}!`);
-        router.replace('/profile'); 
-      } else {
-        Alert.alert('Error', 'Email or password is incorrect');
-      }
+      const auth = getAuthApp
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password)
+      // signed in
+      const u = cred.user
+      Alert.alert('Success', `Welcome back, ${u.displayName || u.email}!`)
+      router.replace('/profile')
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Error', 'Something went wrong');
+      // provide clearer error messages for auth
+      const msg = error?.code ? error.code.replace('auth/', '').replace(/-/g, ' ') : 'Something went wrong'
+      Alert.alert('Error', msg)
     }
   };
 

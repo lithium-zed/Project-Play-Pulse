@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react'
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { onAuthStateChanged } from 'firebase/auth'
 import {
   StyleSheet,
   Text,
@@ -114,17 +116,11 @@ const Home = () => {
   }
 const [isLoggedIn,setIsLoggedIn] = useState(false);
 useEffect(() => {
-  const checkLogin = async () => {
-    try {
-      // match the key used in your login screen (userToken)
-      const userToken = await AsyncStorage.getItem('userToken');
-      setIsLoggedIn(!!userToken);
-    } catch (e) {
-      console.error('Error checking login:', e);
-      setIsLoggedIn(false);
-    }
-  }
-  checkLogin();
+  const auth = getAuthApp
+  const unsub = onAuthStateChanged(auth, (u) => {
+    setIsLoggedIn(!!u)
+  })
+  return () => unsub()
 }, [modalVisible])
   // Event handlers
   const openEvent = (event) => {
