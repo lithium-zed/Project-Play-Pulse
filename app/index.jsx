@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { getAuthApp } from '../firebase/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -7,6 +6,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Alert,
   useColorScheme,
   Modal,
   Pressable,
@@ -41,23 +41,28 @@ const Home = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [joinedEvents, setJoinedEvents] = useState({})
   const [inviteCode, setInviteCode] = useState('')
+
   const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   // helper: current user email (prefer firebase currentUser, normalize to lowercase)
+
   const getCurrentUserEmail = async () => {
     try {
       const auth = typeof getAuthApp === 'function' ? getAuthApp() : getAuthApp
       const fu = auth?.currentUser
       if (fu?.email) return String(fu.email).toLowerCase()
+
       const userData = await AsyncStorage.getItem('user')
       if (!userData) return null
       const parsed = JSON.parse(userData)
+
       return parsed?.email ? String(parsed.email).toLowerCase() : null
     } catch (e) {
       console.warn('getCurrentUserEmail error', e)
       return null
     }
   }
+
 
   const parseDate = (mmddyyyy) => {
     const [m, d, y] = mmddyyyy.split('/').map(Number)
@@ -68,6 +73,7 @@ const Home = () => {
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
+
 
   // Load saved events and normalize shapes
   const loadSavedEvents = async () => {
@@ -115,7 +121,7 @@ const Home = () => {
     }
   }
 
-  // joinedEvents persisted per-user under `joinedEvents:<email>`
+  // joinedEvents persisted per-user under `joinedEvents:<email>`'
   const loadJoinedEvents = async () => {
     try {
       const email = await getCurrentUserEmail()
@@ -242,6 +248,11 @@ const Home = () => {
 
   // guard duplicate joins/leaves and log actions (helps debug)
   const joinEvent = async () => {
+    // function-level guard
+    if (!isLoggedIn) {
+      Alert.alert('Login required', 'You must be logged in to join an event')
+      return
+    }
     if (!selectedEvent) return
     if (!selectedEvent.participants) return
 
@@ -280,14 +291,21 @@ const Home = () => {
     setEvents(updatedEvents)
     await saveEvents(updatedEvents)
 
+
     const newJoined = { ...joinedEvents, [selectedEvent.id]: true }
     await saveJoinedEvents(newJoined)
+
 
     const updatedEvent = updatedEvents.find(ev => ev.id === selectedEvent.id)
     setSelectedEvent(updatedEvent)
   }
 
   const leaveEvent = async () => {
+    // function-level guard
+    if (!isLoggedIn) {
+      Alert.alert('Login required', 'You must be logged in to leave an event')
+      return
+    }
     if (!selectedEvent?.participants) return
 
     if (!isLoggedIn) {
@@ -312,8 +330,10 @@ const Home = () => {
         : ev
     )
 
+
     setEvents(updatedEvents)
     await saveEvents(updatedEvents)
+
 
     const newJoinedEvents = { ...joinedEvents }
     delete newJoinedEvents[selectedEvent.id]
@@ -404,29 +424,13 @@ const Home = () => {
 
               <View style={modalStyles.buttonsRow}>
                 {isLoggedIn && joinedEvents[selectedEvent?.id] ? (
-                  <TouchableOpacity
-                    style={modalStyles.leaveBtn}
-                    onPress={() => {
-                      // user must be logged in to leave (redundant guard)
-                      if (!isLoggedIn) {
-                        Alert.alert('Login required', 'You must be logged in to leave an event')
-                        return
-                      }
-                      leaveEvent()
-                    }}
-                  >
+                  <TouchableOpacity style={modalStyles.leaveBtn} onPress={leaveEvent}>
                     <Text style={modalStyles.leaveBtnText}>Leave</Text>
                   </TouchableOpacity>
                 ) : (
                   <TouchableOpacity
                     style={[modalStyles.joinBtn, (!selectedEvent?.participants || selectedEvent.participants.current >= selectedEvent.participants.max || !isLoggedIn) && modalStyles.disabledButton]}
-                    onPress={() => {
-                      if (!isLoggedIn) {
-                        Alert.alert('Login required', 'You must be logged in to join an event')
-                        return
-                      }
-                      joinEvent()
-                    }}
+                    onPress={joinEvent}
                     disabled={!selectedEvent?.participants || selectedEvent.participants.current >= selectedEvent.participants.max || !isLoggedIn}
                   >
                     <Text style={modalStyles.joinBtnText}>Join</Text>
@@ -437,8 +441,8 @@ const Home = () => {
                 </TouchableOpacity>
               </View>
             </View>
-          </Pressable>
-        </Modal>
+           </Pressable>
+         </Modal>
       </SafeAreaView>
     </ThemedView>
   )
