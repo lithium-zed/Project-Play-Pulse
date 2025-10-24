@@ -26,57 +26,17 @@ const Home = () => {
   const insets = useSafeAreaInsets()
 
   // State
-  const [events, setEvents] = useState([
-    { 
-      id: '1', 
-      title: 'Live Concert', 
-      date: '10/19/2025', 
-      host: 'John Smith',
-      tag: 'MUSIC',
-      access: 'public',
-      participants: { current: 0, max: 10 }
-    },
-    { 
-      id: '2', 
-      title: 'Live Concert', 
-      date: '10/19/2025', 
-      host: 'Sarah Wilson',
-      tag: 'MUSIC',
-      access: 'public',
-      participants: { current: 0, max: 10 }
-    },
-    { 
-      id: '3', 
-      title: 'Art Expo', 
-      date: '10/19/2025',
-      participants: { current: 5, max: 15 }, 
-      description: 'An immersive art exhibition featuring local artists.',
-      host: 'Maria Garcia',
-      tag: 'ART',
-      access: 'public'
-  
-    },
-    { 
-      id: '4', 
-      title: 'Tech Talk', 
-      date: '10/19/2025', 
-      host: 'Alex Chen',
-      tag: 'TECH',
-      access: 'private',
-      participants: { current: 0, max: 10 }
-    },
-    { 
-      id: '5', 
-      title: 'Book Club', 
-      date: '10/19/2025',
-      participants: { current: 9, max: 10 }, // Changed from 3 to 9
-      description: 'Join us for an engaging discussion.',
-      host: 'Emma Williams',
-      tag: 'BOOK',
-      access: 'private'
-     
-    }
-  ])
+  // start with an empty array; we'll load saved events or fall back to a seed set
+  const [events, setEvents] = useState([])
+
+  // A small seed dataset used only when there are no saved events (useful for dev/demo)
+  const SEED_EVENTS = [
+    { id: '1', title: 'Live Concert', date: '10/24/2025', host: 'John Smith', tag: 'MUSIC', access: 'public', participants: { current: 0, max: 10 } },
+    { id: '2', title: 'Live Concert', date: '10/24/2025', host: 'Sarah Wilson', tag: 'MUSIC', access: 'public', participants: { current: 0, max: 10 } },
+    { id: '3', title: 'Art Expo', date: '10/25/2025', participants: { current: 5, max: 15 }, description: 'An immersive art exhibition featuring local artists.', host: 'Maria Garcia', tag: 'ART', access: 'public' },
+    { id: '4', title: 'Tech Talk', date: '10/25/2025', host: 'Alex Chen', tag: 'TECH', access: 'private', participants: { current: 0, max: 10 } },
+    { id: '5', title: 'Book Club', date: '10/25/2025', participants: { current: 9, max: 10 }, description: 'Join us for an engaging discussion.', host: 'Emma Williams', tag: 'BOOK', access: 'private' }
+  ]
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [modalVisible, setModalVisible] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -130,12 +90,11 @@ const Home = () => {
           participants: { current: 0, max: (typeof e.participants === 'number' ? e.participants : (e.participants?.max ?? 10)) },
           description: e.description || ''
         }))
-        // prepend saved events so newest are first but avoid duplicate ids
-        setEvents((prev) => {
-          const existingIds = new Set(prev.map(p => p.id))
-          const toAdd = normalized.filter(n => !existingIds.has(n.id))
-          return [...toAdd, ...prev]
-        })
+        // Replace events with stored (newest first)
+        setEvents(normalized)
+      } else {
+        // no stored events — fall back to seed data (useful for dev/demo)
+        setEvents(SEED_EVENTS)
       }
     } catch (error) {
       console.log('Error loading saved events:', error)
@@ -247,13 +206,7 @@ useEffect(() => {
     if (ev.participants && ev.participants.current >= ev.participants.max) {
       return '#FF3B30' // red for full events
     }
-    
-    // Then check if event is finished (past date)
-    if (eventDate < now) {
-      return '#8E8E93' // grey for finished events
-    }
-    
-    // Then check if event is private
+
     if (ev.access === 'private') {
       return '#FFCC00' // yellow for private events
     }
