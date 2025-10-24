@@ -14,21 +14,42 @@ const Register = () => {
   const theme = Colors[colorScheme] ?? Colors.dark
 
   const handleRegister = async () => {
-    if (!username || !email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
+    const trimmedUsername = username.trim()
+    const trimmedEmail = email.trim()
+
+    if (!trimmedUsername || !trimmedEmail || !password) {
+      Alert.alert('Error', 'Please fill in all fields')
+      return
+    }
+
+    // Username: 6-30 chars
+    if (trimmedUsername.length < 6 || trimmedUsername.length > 30) {
+      Alert.alert('Invalid username', 'Username must be between 6 and 30 characters')
+      return
+    }
+
+    // Email validation (simple, covers most common valid addresses)
+    const emailRe = /^[\w.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+    if (!emailRe.test(trimmedEmail)) {
+      Alert.alert('Invalid email', 'Please enter a valid email address')
+      return
+    }
+
+    // Password: minimum 8 characters
+    if (password.length < 8) {
+      Alert.alert('Weak password', 'Password must be at least 8 characters')
+      return
     }
 
     try {
+      const userData = { username: trimmedUsername, email: trimmedEmail, password }
+      await AsyncStorage.setItem('user', JSON.stringify(userData))
 
-      const userData = { username, email, password };
-      await AsyncStorage.setItem('user', JSON.stringify(userData));
-
-      Alert.alert('Success', 'Registration complete!');
-      router.replace('/profile'); 
+      Alert.alert('Success', 'Registration complete!')
+      router.replace('/profile')
     } catch (error) {
-      console.error('Error saving user data:', error);
-      Alert.alert('Error', 'Failed to save user data');
+      console.error('Error saving user data:', error)
+      Alert.alert('Error', 'Failed to save user data')
     }
   };
 
