@@ -1,11 +1,26 @@
-import React from 'react'
-import { View, Text, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { View, Text, TouchableOpacity, StyleSheet, useColorScheme, Keyboard, Platform } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter, useSegments } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Colors } from "../../components/Colors"
 
 export default function FooterNav() {
+
+  const [keyboardVisible, setKeyboardVisible] = useState(false)
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true))
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false))
+
+    return () => {
+      showSub.remove()
+      hideSub.remove()
+    }
+  }, [])
 
   const router = useRouter()
   const segments = useSegments()
@@ -20,6 +35,8 @@ export default function FooterNav() {
     // simple active check: first segment
     return segments[0] === path.replace(/^\//, '')
   }
+
+  if (keyboardVisible) return null
 
   return (
     // compute theme-aware styles so they reliably override static styles
