@@ -1,10 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { onAuthStateChanged } from 'firebase/auth'
 import {
   StyleSheet,
   Text,
   View,
+  Alert,
   useColorScheme,
   Modal,
   Pressable,
@@ -21,16 +23,11 @@ import Separator2 from './components/Separator2'
 import EventCardLive from './components/EventCardLive'
 
 const Home = () => {
-  // Hooks
   const colorScheme = useColorScheme()
   const theme = Colors[colorScheme] ?? Colors.dark
   const insets = useSafeAreaInsets()
 
-  // State
-  // start with an empty array; we'll load saved events or fall back to a seed set
   const [events, setEvents] = useState([])
-
-  // A small seed dataset used only when there are no saved events (useful for dev/demo)
   const SEED_EVENTS = [
     { id: '1', title: 'Live Concert', date: '10/24/2025', host: 'John Smith', tag: 'MUSIC', access: 'public', participants: { current: 0, max: 10 } },
     { id: '2', title: 'Live Concert', date: '10/24/2025', host: 'Sarah Wilson', tag: 'MUSIC', access: 'public', participants: { current: 0, max: 10 } },
@@ -38,65 +35,77 @@ const Home = () => {
     { id: '4', title: 'Tech Talk', date: '10/25/2025', host: 'Alex Chen', tag: 'TECH', access: 'private', participants: { current: 0, max: 10 }, inviteCode: 'TECH2025' },
     { id: '5', title: 'Book Club', date: '10/25/2025', participants: { current: 9, max: 10 }, description: 'Join us for an engaging discussion.', host: 'Emma Williams', tag: 'BOOK', access: 'private', inviteCode: 'BOOKCLUB' }
   ]
+
   const [selectedEvent, setSelectedEvent] = useState(null)
   const [modalVisible, setModalVisible] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [joinedEvents, setJoinedEvents] = useState({})
   const [inviteCode, setInviteCode] = useState('')
 
-  
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
-  // Date helpers
-  const today = new Date()
-  
+  // helper: current user email (prefer firebase currentUser, normalize to lowercase)
+
+  const getCurrentUserEmail = async () => {
+    try {
+      const auth = typeof getAuthApp === 'function' ? getAuthApp() : getAuthApp
+      const fu = auth?.currentUser
+      if (fu?.email) return String(fu.email).toLowerCase()
+
+      const userData = await AsyncStorage.getItem('user')
+      if (!userData) return null
+      const parsed = JSON.parse(userData)
+
+      return parsed?.email ? String(parsed.email).toLowerCase() : null
+    } catch (e) {
+      console.warn('getCurrentUserEmail error', e)
+      return null
+    }
+  }
+
+
   const parseDate = (mmddyyyy) => {
     const [m, d, y] = mmddyyyy.split('/').map(Number)
     return new Date(y, m - 1, d)
   }
 
-  const isSameDay = (a, b) => 
-    a.getFullYear() === b.getFullYear() && 
-    a.getMonth() === b.getMonth() && 
+  const isSameDay = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
 
-  // Load joined events from AsyncStorage
-  useEffect(() => {
-    loadJoinedEvents()
-    loadSavedEvents()
-  }, [])
 
-  const loadJoinedEvents = async () => {
-    try {
-      const stored = await AsyncStorage.getItem('joinedEvents')
-      if (stored) {
-        setJoinedEvents(JSON.parse(stored))
-      }
-    } catch (error) {
-      console.log('Error loading joined events:', error)
-    }
-  }
-
+  // Load saved events and normalize shapes
   const loadSavedEvents = async () => {
     try {
       const stored = await AsyncStorage.getItem('events')
       if (stored) {
         const parsed = JSON.parse(stored)
-        // normalize stored events to match expected shape
-        const normalized = parsed.map((e) => ({
-          id: e.id ?? Date.now().toString(),
-          title: e.title || 'Untitled',
-          date: e.date || '',
-          host: e.hostName || e.host || 'Unknown',
-          tag: (e.category || e.tag || '').toUpperCase(),
-          access: e.status === 'private' ? 'private' : (e.access || 'public'),
-          participants: { current: 0, max: (typeof e.participants === 'number' ? e.participants : (e.participants?.max ?? 10)) },
-          description: e.description || '',
-          inviteCode: e.inviteCode || e.invitationCode || null
-        }))
-        // Replace events with stored (newest first)
+        const normalized = parsed.map((e) => {
+          let participants = { current: 0, max: 10 }
+          if (typeof e.participants === 'number') {
+            participants = { current: 0, max: e.participants }
+          } else if (e.participants && typeof e.participants === 'object') {
+            participants = {
+              current: typeof e.participants.current === 'number' ? e.participants.current : (e.participants?.count ?? 0),
+              max: typeof e.participants.max === 'number' ? e.participants.max : (e.participants?.limit ?? 10)
+            }
+          }
+
+          return {
+            id: e.id ?? Date.now().toString(),
+            title: e.title || 'Untitled',
+            date: e.date || '',
+            host: e.hostName || e.host || 'Unknown',
+            tag: (e.category || e.tag || '').toUpperCase(),
+            access: e.status === 'private' ? 'private' : (e.access || 'public'),
+            participants,
+            description: e.description || '',
+            inviteCode: e.inviteCode || e.invitationCode || null
+          }
+        })
         setEvents(normalized)
       } else {
-        // no stored events — fall back to seed data (useful for dev/demo)
         setEvents(SEED_EVENTS)
       }
     } catch (error) {
@@ -104,29 +113,126 @@ const Home = () => {
     }
   }
 
+  const saveEvents = async (newEvents) => {
+    try {
+      await AsyncStorage.setItem('events', JSON.stringify(newEvents))
+    } catch (error) {
+      console.log('Error saving events:', error)
+    }
+  }
+
+  // joinedEvents persisted per-user under `joinedEvents:<email>`'
+  const loadJoinedEvents = async () => {
+    try {
+      const email = await getCurrentUserEmail()
+      if (!email) {
+        setJoinedEvents({})
+        return
+      }
+      const key = `joinedEvents:${email}`
+      const stored = await AsyncStorage.getItem(key)
+      setJoinedEvents(stored ? JSON.parse(stored) : {})
+    } catch (error) {
+      console.log('Error loading joined events:', error)
+    }
+  }
+
   const saveJoinedEvents = async (newJoinedEvents) => {
     try {
-      await AsyncStorage.setItem('joinedEvents', JSON.stringify(newJoinedEvents))
+      const email = await getCurrentUserEmail()
+      if (!email) {
+        console.warn('saveJoinedEvents: no logged-in user — not saving')
+        setJoinedEvents(newJoinedEvents)
+        return
+      }
+      const key = `joinedEvents:${email}`
+      await AsyncStorage.setItem(key, JSON.stringify(newJoinedEvents))
       setJoinedEvents(newJoinedEvents)
     } catch (error) {
       console.log('Error saving joined events:', error)
     }
   }
-const [isLoggedIn,setIsLoggedIn] = useState(false);
-useEffect(() => {
+
+
+  // check login state (based on token key used by your login screen)
   const checkLogin = async () => {
     try {
-      // match the key used in your login screen (userToken)
-      const userToken = await AsyncStorage.getItem('userToken');
-      setIsLoggedIn(!!userToken);
+      const userToken = await AsyncStorage.getItem('userToken')
+      setIsLoggedIn(!!userToken)
     } catch (e) {
-      console.error('Error checking login:', e);
-      setIsLoggedIn(false);
+      console.error('Error checking login:', e)
+      setIsLoggedIn(false)
     }
   }
-  checkLogin();
-}, [modalVisible])
-  // Event handlers
+
+  // init: load events → check login → load joined for that user
+  useEffect(() => {
+    const init = async () => {
+      await loadSavedEvents()
+      await checkLogin()
+      await loadJoinedEvents()
+    }
+    init()
+  }, [])
+
+  // reload joined when login changes (clears when logged out)
+  useEffect(() => {
+    loadJoinedEvents()
+  }, [isLoggedIn])
+
+  // also re-check login when modal toggles (keeps UI in sync)
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const userToken = await AsyncStorage.getItem('userToken');
+        setIsLoggedIn(!!userToken);
+      } catch (e) {
+        console.error('Error checking login:', e);
+        setIsLoggedIn(false);
+      }
+    }
+    check();
+  }, [modalVisible])
+
+  // add auth subscription to keep isLoggedIn and storage in sync
+  useEffect(() => {
+    try {
+      const auth = typeof getAuthApp === 'function' ? getAuthApp() : getAuthApp
+      const unsub = onAuthStateChanged(auth, async (u) => {
+        try {
+          if (u) {
+            setIsLoggedIn(true)
+            // persist minimal user info for per-user keys
+            await AsyncStorage.setItem('user', JSON.stringify({ email: u.email, displayName: u.displayName }))
+            await AsyncStorage.setItem('userToken', 'loggedIn')
+            await loadJoinedEvents()
+          } else {
+            setIsLoggedIn(false)
+            setJoinedEvents({})
+            // clear stored user/token on sign-out
+            await AsyncStorage.removeItem('user')
+            await AsyncStorage.removeItem('userToken')
+          }
+        } catch (err) {
+          console.warn('onAuthStateChanged handler error', err)
+        }
+      })
+      return () => unsub()
+    } catch (e) {
+      console.warn('onAuthStateChanged subscription failed', e)
+    }
+  }, []) // run once
+
+   useEffect(() => {
+    if (!isLoggedIn) {
+      setJoinedEvents({});
+    } else {
+      // reload the current user's joined events when they log in
+      loadJoinedEvents();
+    }
+  }, [isLoggedIn])
+
+
   const openEvent = (event) => {
     setSelectedEvent(event)
     setInviteCode('')
@@ -138,15 +244,28 @@ useEffect(() => {
     setSelectedEvent(null)
   }
 
-  const handleBackdropPress = () => {
-    closeEvent()
-  }
+  const handleBackdropPress = () => closeEvent()
 
+  // guard duplicate joins/leaves and log actions (helps debug)
   const joinEvent = async () => {
+    // function-level guard
+    if (!isLoggedIn) {
+      Alert.alert('Login required', 'You must be logged in to join an event')
+      return
+    }
     if (!selectedEvent) return
     if (!selectedEvent.participants) return
 
-    // Check if private event and invite code is required
+    if (!isLoggedIn) {
+      Alert.alert('Login required', 'You must be logged in to join an event')
+      return
+    }
+
+    if (joinedEvents[selectedEvent.id]) {
+      Alert.alert('Already joined', 'You have already joined this event')
+      return
+    }
+
     if (selectedEvent.access === 'private') {
       if (!inviteCode.trim()) {
         Alert.alert('Invite code required', 'Please enter the invite code for this private event.')
@@ -161,40 +280,61 @@ useEffect(() => {
     const updatedEvents = events.map(ev =>
       ev.id === selectedEvent.id
         ? {
-            ...ev,
-            participants: {
-              current: Math.min(ev.participants.current + 1, ev.participants.max),
-              max: ev.participants.max
-            }
+          ...ev,
+          participants: {
+            current: Math.min(ev.participants.current + 1, ev.participants.max),
+            max: ev.participants.max
           }
+        }
         : ev
     )
     setEvents(updatedEvents)
+    await saveEvents(updatedEvents)
 
-    // Save joined status
-    await saveJoinedEvents({ ...joinedEvents, [selectedEvent.id]: true })
+
+    const newJoined = { ...joinedEvents, [selectedEvent.id]: true }
+    await saveJoinedEvents(newJoined)
+
 
     const updatedEvent = updatedEvents.find(ev => ev.id === selectedEvent.id)
     setSelectedEvent(updatedEvent)
   }
 
   const leaveEvent = async () => {
+    // function-level guard
+    if (!isLoggedIn) {
+      Alert.alert('Login required', 'You must be logged in to leave an event')
+      return
+    }
     if (!selectedEvent?.participants) return
-    
+
+    if (!isLoggedIn) {
+      Alert.alert('Login required', 'You must be logged in to leave an event')
+      return
+    }
+
+    if (!joinedEvents[selectedEvent.id]) {
+      Alert.alert('Not joined', 'You are not currently joined to this event')
+      return
+    }
+
     const updatedEvents = events.map(ev =>
       ev.id === selectedEvent.id
-        ? { 
-            ...ev, 
-            participants: { 
-              current: Math.max(ev.participants.current - 1, 0), 
-              max: ev.participants.max 
-            } 
+        ? {
+          ...ev,
+          participants: {
+            current: Math.max(ev.participants.current - 1, 0),
+            max: ev.participants.max
           }
+        }
         : ev
     )
-    setEvents(updatedEvents)
 
-    // Remove joined status
+
+    setEvents(updatedEvents)
+    await saveEvents(updatedEvents)
+
+
     const newJoinedEvents = { ...joinedEvents }
     delete newJoinedEvents[selectedEvent.id]
     await saveJoinedEvents(newJoinedEvents)
@@ -204,30 +344,18 @@ useEffect(() => {
   }
 
   const refreshEvents = useCallback(() => {
-  setRefreshing(true)
-  setTimeout(() => {
-    setRefreshing(false)
-  }, 1000)
-}, [modalVisible])
+    setRefreshing(true)
+    setTimeout(() => {
+      setRefreshing(false)
+    }, 1000)
+  }, [modalVisible])
 
-  // Status color helper
+  const today = new Date()
   const getStatusColor = (ev) => {
-    if (!ev) return '#34C759' // default green
-    
-    const eventDate = parseDate(ev.date)
-    const now = new Date()
-    
-    // First check if event is full - this should take priority
-    if (ev.participants && ev.participants.current >= ev.participants.max) {
-      return '#FF3B30' // red for full events
-    }
-
-    if (ev.access === 'private') {
-      return '#FFCC00' // yellow for private events
-    }
-    
-    // Default: open to all
-    return '#34C759' // green for open events
+    if (!ev) return '#34C759'
+    if (ev.participants && ev.participants.current >= ev.participants.max) return '#FF3B30'
+    if (ev.access === 'private') return '#FFCC00'
+    return '#34C759'
   }
 
   const renderItem = ({ item }) => (
@@ -243,17 +371,11 @@ useEffect(() => {
     </Pressable>
   )
 
-  // Data preparation
   const live = events.filter(e => isSameDay(parseDate(e.date), today))
   const upcoming = events.filter(e => parseDate(e.date) > today)
-  
   live.sort((a, b) => parseDate(a.date) - parseDate(b.date))
   upcoming.sort((a, b) => parseDate(a.date) - parseDate(b.date))
-  
-  const sections = [
-    { title: 'Live Events', data: live },
-    { title: 'Upcoming', data: upcoming }
-  ]
+  const sections = [{ title: 'Live Events', data: live }, { title: 'Upcoming', data: upcoming }]
 
   return (
     <ThemedView style={styles.container}>
@@ -274,105 +396,61 @@ useEffect(() => {
           renderSectionHeader={({ section: { title } }) => (
             title === 'Live Events' ? <Separator label={title} /> : <Separator2 label={title} />
           )}
-          // add a small internal top padding so headers aren't glued to the safe area
           contentContainerStyle={[styles.cardsContainer, { paddingTop: 8 }]}
           showsVerticalScrollIndicator={true}
           stickySectionHeadersEnabled={true}
         />
 
-        {/* Event details modal */}
-        <Modal
-          visible={modalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={closeEvent}
-        >
+        <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeEvent}>
           <Pressable style={modalStyles.backdrop} onPress={handleBackdropPress}>
             <View style={[modalStyles.modal, { minHeight: selectedEvent?.access === 'private' && !joinedEvents[selectedEvent?.id] ? 360 : 295 }]}>
-                <View style={modalStyles.header}>
-                  <View 
-                    style={[
-                      modalStyles.statusDot, 
-                      { backgroundColor: selectedEvent ? getStatusColor(selectedEvent) : '#34C759' }
-                    ]} 
-                  />
-                  <Text style={modalStyles.title}>{selectedEvent?.title}</Text>
-                </View>
-                <Text style={modalStyles.meta}>{selectedEvent?.date} • {selectedEvent?.host}</Text>
-                {selectedEvent?.description ? (
-                  <Text style={modalStyles.desc}>{selectedEvent.description}</Text>
-                ) : null}
-                {selectedEvent?.participants ? (
-                  <Text style={modalStyles.participants}>
-                    Participants {selectedEvent.participants.current}/{selectedEvent.participants.max}
-                  </Text>
-                ) : null}
-                {selectedEvent?.access === 'private' && !joinedEvents[selectedEvent?.id] ? (
-                  <TextInput
-                    style={modalStyles.inviteInput}
-                    placeholder={isLoggedIn ? "Enter invite code" : "Login required"}
-                    placeholderTextColor="#CCCCCC"
-                    value={inviteCode}
-                    onChangeText={setInviteCode}
-                    secureTextEntry={false}
-                    editable={isLoggedIn}
-                  />
-                ) : null}
-
-               <View style={modalStyles.buttonsRow}>
-  {joinedEvents[selectedEvent?.id] ? (
-    <TouchableOpacity 
-      style={modalStyles.leaveBtn} 
-      onPress={() => {
-        if (!isLoggedIn) {
-          Alert.alert('Login required', 'You must be logged in to leave an event');
-          return;
-        }
-        leaveEvent();
-      }}
-    >
-      <Text style={modalStyles.leaveBtnText}>Leave</Text>
-    </TouchableOpacity>
-  ) : (
-    <TouchableOpacity 
-      style={[
-        modalStyles.joinBtn,
-        (!selectedEvent?.participants || 
-         selectedEvent.participants.current >= selectedEvent.participants.max || 
-         !isLoggedIn) && 
-        modalStyles.disabledButton
-      ]} 
-      onPress={() => {
-        if (!isLoggedIn) {
-          Alert.alert('Login required', 'You must be logged in to join an event');
-          return;
-        }
-        joinEvent();
-      }}
-      disabled={!selectedEvent?.participants || 
-               selectedEvent.participants.current >= selectedEvent.participants.max || 
-               !isLoggedIn}
-    >
-      <Text style={modalStyles.joinBtnText}>Join</Text>
-    </TouchableOpacity>
-  )}
-  <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
-    <Text style={modalStyles.closeBtnText}>Close</Text>
-  </TouchableOpacity>
-</View>
-
+              <View style={modalStyles.header}>
+                <View style={[modalStyles.statusDot, { backgroundColor: selectedEvent ? getStatusColor(selectedEvent) : '#34C759' }]} />
+                <Text style={modalStyles.title}>{selectedEvent?.title}</Text>
               </View>
-            </Pressable>
-        </Modal>
+              <Text style={modalStyles.meta}>{selectedEvent?.date} • {selectedEvent?.host}</Text>
+              {selectedEvent?.description ? <Text style={modalStyles.desc}>{selectedEvent.description}</Text> : null}
+              {selectedEvent?.participants ? <Text style={modalStyles.participants}>Participants {selectedEvent.participants.current}/{selectedEvent.participants.max}</Text> : null}
+              {selectedEvent?.access === 'private' && !joinedEvents[selectedEvent?.id] ? (
+                <TextInput
+                  style={modalStyles.inviteInput}
+                  placeholder={isLoggedIn ? "Enter invite code" : "Login required"}
+                  placeholderTextColor="#CCCCCC"
+                  value={inviteCode}
+                  onChangeText={setInviteCode}
+                  editable={isLoggedIn}
+                />
+              ) : null}
 
-       </SafeAreaView>
-     </ThemedView>
-   )
- }
+              <View style={modalStyles.buttonsRow}>
+                {isLoggedIn && joinedEvents[selectedEvent?.id] ? (
+                  <TouchableOpacity style={modalStyles.leaveBtn} onPress={leaveEvent}>
+                    <Text style={modalStyles.leaveBtnText}>Leave</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[modalStyles.joinBtn, (!selectedEvent?.participants || selectedEvent.participants.current >= selectedEvent.participants.max || !isLoggedIn) && modalStyles.disabledButton]}
+                    onPress={joinEvent}
+                    disabled={!selectedEvent?.participants || selectedEvent.participants.current >= selectedEvent.participants.max || !isLoggedIn}
+                  >
+                    <Text style={modalStyles.joinBtnText}>Join</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
+                  <Text style={modalStyles.closeBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+           </Pressable>
+         </Modal>
+      </SafeAreaView>
+    </ThemedView>
+  )
+}
 
- export default Home
+export default Home
 
- const styles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'stretch',
@@ -385,20 +463,20 @@ useEffect(() => {
     paddingBottom: 24,
     gap: 12,
     alignItems: 'stretch'
-    },
-    card : {
-        backgroundColor: '#eee',
-        padding: 20,
-        borderRadius: 10,
-        boxShadow: '4px 4px rgba(0,0,0,0.1)'
-    },
-    title: {
-        fontWeight: 'bold',
-        fontSize: 25
-    }
- })
+  },
+  card: {
+    backgroundColor: '#eee',
+    padding: 20,
+    borderRadius: 10,
+    boxShadow: '4px 4px rgba(0,0,0,0.1)'
+  },
+  title: {
+    fontWeight: 'bold',
+    fontSize: 25
+  }
+})
 
- const modalStyles = StyleSheet.create({
+const modalStyles = StyleSheet.create({
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',

@@ -1,14 +1,17 @@
 // app/login.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, useColorScheme } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { Colors } from '../components/Colors'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { signInWithEmailAndPassword } from 'firebase/auth'
 
 const Login = () => {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const colorScheme = useColorScheme()
   const theme = Colors[colorScheme] ?? Colors.dark
 
@@ -19,28 +22,36 @@ const Login = () => {
     }
 
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (!userData) {
-        Alert.alert('Error', 'No registered user found');
-        return;
-      }
-
-      const user = JSON.parse(userData);
-
-      if (email === user.email && password === user.password) {
-
-        await AsyncStorage.setItem('userToken', 'loggedIn');
-
-        Alert.alert('Success', `Welcome back, ${user.username}!`);
-        router.replace('/profile'); 
-      } else {
-        Alert.alert('Error', 'Email or password is incorrect');
-      }
+      const auth = getAuthApp
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password)
+      // signed in
+      const u = cred.user
+      Alert.alert('Success', `Welcome back, ${u.displayName || u.email}!`)
+      router.replace('/profile')
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Error', 'Something went wrong');
+      // handle user-not-found with a friendly message
+      if (error?.code === 'auth/invalid-credential') {
+        Alert.alert('Error', 'this account does not exist')
+        return
+      }
+      // provide clearer error messages for other auth errors
+      const msg = error?.code ? error.code.replace('auth/', '').replace(/-/g, ' ') : 'Something went wrong'
+      Alert.alert('Error', msg)
     }
   };
+
+  useEffect(() => {
+    const v = email.trim()
+    if (!v) { setEmailError(''); return }
+    const emailRe = /^[\w.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/
+    setEmailError(emailRe.test(v) ? '' : 'Invalid email address')
+  }, [email])
+
+  useEffect(() => {
+    if (!password) { setPasswordError(''); return }
+    setPasswordError(password.length >= 8 ? '' : 'Password must be at least 8 characters')
+  }, [password])
 
   return (
     <View style={[styles.container, { backgroundColor: theme.background }] }>
@@ -54,6 +65,7 @@ const Login = () => {
         onChangeText={setEmail}
         keyboardType="email-address"
       />
+      {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
 
       <TextInput
         style={[styles.input, { borderColor: theme.primary, color: theme.text, backgroundColor: theme.background }]}
@@ -63,6 +75,7 @@ const Login = () => {
         onChangeText={setPassword}
         secureTextEntry
       />
+      {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
       <Button title="Log In" onPress={handleLogin} color={theme.accent} />
     </View>
@@ -88,5 +101,9 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 10,
     marginBottom: 15,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 12,
   },
 });

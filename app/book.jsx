@@ -15,6 +15,9 @@ import {
 import { Link, useRouter } from 'expo-router'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Colors } from '../components/Colors'
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'
+import { getAuthApp } from '../firebase/firebaseConfig'
+import { onAuthStateChanged } from 'firebase/auth'
 
 const CATEGORIES = ['Yu-Gi-Oh', 'Magic the Gathering', 'BeybladeX', 'DnD', 'PokemonTCG', 'Misc']
 
@@ -81,22 +84,17 @@ const BookEvent = () => {
     const [submitting, setSubmitting] = useState(false)
 
     useEffect(() => {
-        const loadUser = async () => {
-            try {
-                const token = await AsyncStorage.getItem('userToken')
-                if (token) {
-                    const userData = await AsyncStorage.getItem('user')
-                    if (userData) {
-                        const p = JSON.parse(userData)
-                        setUser(p)
-                        setName(p.name || p.username || '')
-                    }
-                }
-            } catch (e) {
-                console.warn('Failed loading user', e)
+        const auth = getAuthApp
+        const unsub = onAuthStateChanged(auth, (u) => {
+            if (u) {
+                setUser(u)
+                setName(u.displayName || u.email || '')
+            } else {
+                setUser(null)
+                setName('')
             }
-        }
-        loadUser()
+        })
+        return () => unsub()
     }, [])
 
     useEffect(() => {
@@ -136,7 +134,7 @@ const BookEvent = () => {
                 participants: Number(participants),
                 status: isPrivate ? 'private' : 'open',
                 invitationCode: isPrivate ? inviteCode : null,
-                hostName: name || user.name || user.username || 'Unknown',
+                hostName: name || user.displayName || user.email || 'Unknown',
                 createdAt: new Date().toISOString(),
             }
 
