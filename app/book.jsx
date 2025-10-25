@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react'
 import {
     StyleSheet,
@@ -13,11 +14,11 @@ import {
     Platform,
 } from 'react-native'
 import { Link, useRouter } from 'expo-router'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Colors } from '../components/Colors'
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'
 import { getAuthApp } from '../firebase/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
+import { saveEvent } from '../firebase/databaseUtils'
 
 const CATEGORIES = ['Yu-Gi-Oh', 'Magic the Gathering', 'BeybladeX', 'DnD', 'PokemonTCG', 'Misc']
 
@@ -126,23 +127,19 @@ const BookEvent = () => {
         setSubmitting(true)
         try {
             const newEvent = {
-                id: Date.now().toString(),
                 title: title.trim(),
                 description: description.trim(),
                 date: formatDateFromParts(month, day, year),
                 time: formatTimeFromParts(hour, minute, ampm),
                 category,
-                participants: Number(participants),
-                status: isPrivate ? 'private' : 'open',
-                invitationCode: isPrivate ? inviteCode : null,
-                hostName: name || user.displayName || user.email || 'Unknown',
-                createdAt: new Date().toISOString(),
+                participants: { current: 0, max: Number(participants) },
+                access: isPrivate ? 'private' : 'public',
+                inviteCode: isPrivate ? inviteCode : null,
+                host: name || user.displayName || user.email || 'Unknown',
+                tag: category.toUpperCase(),
             }
 
-            const stored = await AsyncStorage.getItem('events')
-            const arr = stored ? JSON.parse(stored) : []
-            arr.unshift(newEvent)
-            await AsyncStorage.setItem('events', JSON.stringify(arr))
+            await saveEvent(newEvent)
 
             Alert.alert('Saved', 'Event created successfully.')
             router.push('/')
