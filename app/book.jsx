@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react'
 import {
     StyleSheet,
@@ -13,11 +14,11 @@ import {
     Platform,
 } from 'react-native'
 import { Link, useRouter } from 'expo-router'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Colors } from '../components/Colors'
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'
 import { getAuthApp } from '../firebase/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
+import { saveEvent } from '../firebase/databaseUtils'
 
 const CATEGORIES = ['Yu-Gi-Oh', 'Magic the Gathering', 'BeybladeX', 'DnD', 'PokemonTCG', 'Misc']
 
@@ -52,6 +53,7 @@ const BookEvent = () => {
     const colorScheme = useColorScheme()
     const theme = Colors[colorScheme] ?? Colors.dark
     const router = useRouter()
+    const insets = useSafeAreaInsets()
 
     const now = new Date()
 
@@ -125,23 +127,19 @@ const BookEvent = () => {
         setSubmitting(true)
         try {
             const newEvent = {
-                id: Date.now().toString(),
                 title: title.trim(),
                 description: description.trim(),
                 date: formatDateFromParts(month, day, year),
                 time: formatTimeFromParts(hour, minute, ampm),
                 category,
-                participants: Number(participants),
-                status: isPrivate ? 'private' : 'open',
-                invitationCode: isPrivate ? inviteCode : null,
-                hostName: name || user.displayName || user.email || 'Unknown',
-                createdAt: new Date().toISOString(),
+                participants: { current: 0, max: Number(participants) },
+                access: isPrivate ? 'private' : 'public',
+                inviteCode: isPrivate ? inviteCode : null,
+                host: name || user.displayName || user.email || 'Unknown',
+                tag: category.toUpperCase(),
             }
 
-            const stored = await AsyncStorage.getItem('events')
-            const arr = stored ? JSON.parse(stored) : []
-            arr.unshift(newEvent)
-            await AsyncStorage.setItem('events', JSON.stringify(arr))
+            await saveEvent(newEvent)
 
             Alert.alert('Saved', 'Event created successfully.')
             router.push('/')
@@ -154,217 +152,219 @@ const BookEvent = () => {
     }
 
     return (
-        <KeyboardAvoidingView
-            style={[styles.container, { backgroundColor: theme.background }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-            <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-                <Text style={[styles.title, { color: theme.text }]}>Book Event</Text>
+        <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: theme.background }}>
+            <KeyboardAvoidingView
+                style={[styles.container]}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+                <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                    <Text style={[styles.title, { color: theme.text }]}>Book Event</Text>
 
-                {!user ? (
-                    <View style={[styles.notice, { backgroundColor: theme.primary + '11' }]}>
-                        <Text style={[styles.noticeText, { color: theme.text }]}>You must be logged in to create an event.</Text>
-                        <Link href="/login" style={{ marginTop: 8 }}>
-                            <Text style={{ color: theme.accent }}>Go to Login</Text>
-                        </Link>
-                    </View>
-                ) : (
-                    <Text style={[styles.hostLine, { color: theme.text }]}>Host: {name || 'Unknown'}</Text>
-                )}
-
-                <View style={[styles.field, { borderColor: theme.primary }]}> 
-                    <Text style={[styles.label, { color: theme.text }]}>Event name</Text>
-                    <TextInput
-                        value={title}
-                        onChangeText={setTitle}
-                        placeholder="Event title"
-                        placeholderTextColor={theme.text + '88'}
-                        style={[styles.input, { color: theme.text }]}
-                    />
-                </View>
-
-                <View style={[styles.field, { borderColor: theme.primary }]}> 
-                    <Text style={[styles.label, { color: theme.text }]}>Description (max 100 words)</Text>
-                    <TextInput
-                        value={description}
-                        onChangeText={onDescriptionChange}
-                        placeholder="Describe the event"
-                        placeholderTextColor={theme.text + '88'}
-                        style={[styles.textarea, { color: theme.text }]}
-                        multiline
-                        numberOfLines={4}
-                    />
-                    <Text style={[styles.wordCount, { color: theme.text }]}>{countWords(description)} / 100 words</Text>
-                </View>
-
-                <View style={styles.row}>
-                    <View style={[styles.smallField, { borderColor: theme.primary }]}> 
-                        <Text style={[styles.label, { color: theme.text }]}>Date</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                            <Pressable onPress={() => setShowMonthList(!showMonthList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                <Text style={{ color: theme.text }}>{String(month + 1).padStart(2, '0')}</Text>
-                            </Pressable>
-                            <Pressable onPress={() => setShowDayList(!showDayList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                <Text style={{ color: theme.text }}>{String(day).padStart(2, '0')}</Text>
-                            </Pressable>
-                            <Pressable onPress={() => setShowYearList(!showYearList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                <Text style={{ color: theme.text }}>{year}</Text>
-                            </Pressable>
+                    {!user ? (
+                        <View style={[styles.notice, { backgroundColor: theme.primary + '11' }]}>
+                            <Text style={[styles.noticeText, { color: theme.text }]}>You must be logged in to create an event.</Text>
+                            <Link href="/login" style={{ marginTop: 8 }}>
+                                <Text style={{ color: theme.accent }}>Go to Login</Text>
+                            </Link>
                         </View>
-                        {showMonthList && (
-                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                {Array.from({ length: 12 }).map((_, i) => (
-                                    <Pressable key={i} onPress={() => { setMonth(i); setShowMonthList(false) }} style={styles.dropdownItem}>
-                                        <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        )}
-                        {showDayList && (
-                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                {Array.from({ length: daysInMonth(year, month) }).map((_, i) => (
-                                    <Pressable key={i} onPress={() => { setDay(i + 1); setShowDayList(false) }} style={styles.dropdownItem}>
-                                        <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        )}
-                        {showYearList && (
-                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                {Array.from({ length: 3 }).map((_, i) => {
-                                    const y = now.getFullYear() + i
-                                    return (
-                                        <Pressable key={y} onPress={() => { setYear(y); setShowYearList(false) }} style={styles.dropdownItem}>
-                                            <Text style={{ color: theme.text }}>{y}</Text>
-                                        </Pressable>
-                                    )
-                                })}
-                            </View>
-                        )}
+                    ) : (
+                        <Text style={[styles.hostLine, { color: theme.text }]}>Host: {name || 'Unknown'}</Text>
+                    )}
+
+                    <View style={[styles.field, { borderColor: theme.primary }]}> 
+                        <Text style={[styles.label, { color: theme.text }]}>Event name</Text>
+                        <TextInput
+                            value={title}
+                            onChangeText={setTitle}
+                            placeholder="Event title"
+                            placeholderTextColor={theme.text + '88'}
+                            style={[styles.input, { color: theme.text }]}
+                        />
                     </View>
 
-                    <View style={[styles.smallField, { borderColor: theme.primary }]}> 
-                        <Text style={[styles.label, { color: theme.text }]}>Time</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                            <Pressable onPress={() => setShowHourList(!showHourList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                <Text style={{ color: theme.text }}>{String(hour).padStart(2, '0')}</Text>
-                            </Pressable>
-                            <Pressable onPress={() => setShowMinuteList(!showMinuteList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                <Text style={{ color: theme.text }}>{String(minute).padStart(2, '0')}</Text>
-                            </Pressable>
-                            <Pressable onPress={() => setShowAmpmList(!showAmpmList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                <Text style={{ color: theme.text }}>{ampm}</Text>
-                            </Pressable>
-                        </View>
-                        {showHourList && (
-                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                {Array.from({ length: 12 }).map((_, i) => (
-                                    <Pressable key={i} onPress={() => { setHour(i + 1); setShowHourList(false) }} style={styles.dropdownItem}>
-                                        <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        )}
-                        {showMinuteList && (
-                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                {Array.from({ length: 12 }).map((_, i) => {
-                                    const m = String(i * 5).padStart(2, '0')
-                                    return (
-                                        <Pressable key={m} onPress={() => { setMinute(m); setShowMinuteList(false) }} style={styles.dropdownItem}>
-                                            <Text style={{ color: theme.text }}>{m}</Text>
-                                        </Pressable>
-                                    )
-                                })}
-                            </View>
-                        )}
-                        {showAmpmList && (
-                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                {['AM', 'PM'].map(a => (
-                                    <Pressable key={a} onPress={() => { setAmpm(a); setShowAmpmList(false) }} style={styles.dropdownItem}>
-                                        <Text style={{ color: theme.text }}>{a}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        )}
+                    <View style={[styles.field, { borderColor: theme.primary }]}> 
+                        <Text style={[styles.label, { color: theme.text }]}>Description (max 100 words)</Text>
+                        <TextInput
+                            value={description}
+                            onChangeText={onDescriptionChange}
+                            placeholder="Describe the event"
+                            placeholderTextColor={theme.text + '88'}
+                            style={[styles.textarea, { color: theme.text }]}
+                            multiline
+                            numberOfLines={4}
+                        />
+                        <Text style={[styles.wordCount, { color: theme.text }]}>{countWords(description)} / 100 words</Text>
                     </View>
-                </View>
 
-                <View style={[styles.field, { borderColor: theme.primary }]}> 
-                    <Text style={[styles.label, { color: theme.text }]}>Category</Text>
-                    <Pressable onPress={() => setShowCategoryList(!showCategoryList)} style={[styles.picker, { backgroundColor: theme.primary + '11' }]}> 
-                        <Text style={{ color: theme.text }}>{category}</Text>
-                    </Pressable>
-                    {showCategoryList && (
-                        <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                            {CATEGORIES.map((c) => (
-                                <Pressable key={c} onPress={() => { setCategory(c); setShowCategoryList(false) }} style={styles.dropdownItem}>
-                                    <Text style={{ color: theme.text }}>{c}</Text>
+                    <View style={styles.row}>
+                        <View style={[styles.smallField, { borderColor: theme.primary }]}> 
+                            <Text style={[styles.label, { color: theme.text }]}>Date</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                <Pressable onPress={() => setShowMonthList(!showMonthList)} style={[styles.pickerInline, { padding: 8 }]}> 
+                                    <Text style={{ color: theme.text }}>{String(month + 1).padStart(2, '0')}</Text>
                                 </Pressable>
-                            ))}
+                                <Pressable onPress={() => setShowDayList(!showDayList)} style={[styles.pickerInline, { padding: 8 }]}> 
+                                    <Text style={{ color: theme.text }}>{String(day).padStart(2, '0')}</Text>
+                                </Pressable>
+                                <Pressable onPress={() => setShowYearList(!showYearList)} style={[styles.pickerInline, { padding: 8 }]}> 
+                                    <Text style={{ color: theme.text }}>{year}</Text>
+                                </Pressable>
+                            </View>
+                            {showMonthList && (
+                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                    {Array.from({ length: 12 }).map((_, i) => (
+                                        <Pressable key={i} onPress={() => { setMonth(i); setShowMonthList(false) }} style={styles.dropdownItem}>
+                                            <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            )}
+                            {showDayList && (
+                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                    {Array.from({ length: daysInMonth(year, month) }).map((_, i) => (
+                                        <Pressable key={i} onPress={() => { setDay(i + 1); setShowDayList(false) }} style={styles.dropdownItem}>
+                                            <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            )}
+                            {showYearList && (
+                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                    {Array.from({ length: 3 }).map((_, i) => {
+                                        const y = now.getFullYear() + i
+                                        return (
+                                            <Pressable key={y} onPress={() => { setYear(y); setShowYearList(false) }} style={styles.dropdownItem}>
+                                                <Text style={{ color: theme.text }}>{y}</Text>
+                                            </Pressable>
+                                        )
+                                    })}
+                                </View>
+                            )}
+                        </View>
+
+                        <View style={[styles.smallField, { borderColor: theme.primary }]}> 
+                            <Text style={[styles.label, { color: theme.text }]}>Time</Text>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                                <Pressable onPress={() => setShowHourList(!showHourList)} style={[styles.pickerInline, { padding: 8 }]}> 
+                                    <Text style={{ color: theme.text }}>{String(hour).padStart(2, '0')}</Text>
+                                </Pressable>
+                                <Pressable onPress={() => setShowMinuteList(!showMinuteList)} style={[styles.pickerInline, { padding: 8 }]}> 
+                                    <Text style={{ color: theme.text }}>{String(minute).padStart(2, '0')}</Text>
+                                </Pressable>
+                                <Pressable onPress={() => setShowAmpmList(!showAmpmList)} style={[styles.pickerInline, { padding: 8 }]}> 
+                                    <Text style={{ color: theme.text }}>{ampm}</Text>
+                                </Pressable>
+                            </View>
+                            {showHourList && (
+                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                    {Array.from({ length: 12 }).map((_, i) => (
+                                        <Pressable key={i} onPress={() => { setHour(i + 1); setShowHourList(false) }} style={styles.dropdownItem}>
+                                            <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            )}
+                            {showMinuteList && (
+                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                    {Array.from({ length: 12 }).map((_, i) => {
+                                        const m = String(i * 5).padStart(2, '0')
+                                        return (
+                                            <Pressable key={m} onPress={() => { setMinute(m); setShowMinuteList(false) }} style={styles.dropdownItem}>
+                                                <Text style={{ color: theme.text }}>{m}</Text>
+                                            </Pressable>
+                                        )
+                                    })}
+                                </View>
+                            )}
+                            {showAmpmList && (
+                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                    {['AM', 'PM'].map(a => (
+                                        <Pressable key={a} onPress={() => { setAmpm(a); setShowAmpmList(false) }} style={styles.dropdownItem}>
+                                            <Text style={{ color: theme.text }}>{a}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            )}
+                        </View>
+                    </View>
+
+                    <View style={[styles.field, { borderColor: theme.primary }]}> 
+                        <Text style={[styles.label, { color: theme.text }]}>Category</Text>
+                        <Pressable onPress={() => setShowCategoryList(!showCategoryList)} style={[styles.picker, { backgroundColor: theme.primary + '11' }]}> 
+                            <Text style={{ color: theme.text }}>{category}</Text>
+                        </Pressable>
+                        {showCategoryList && (
+                            <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
+                                {CATEGORIES.map((c) => (
+                                    <Pressable key={c} onPress={() => { setCategory(c); setShowCategoryList(false) }} style={styles.dropdownItem}>
+                                        <Text style={{ color: theme.text }}>{c}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+
+                            <View style={[styles.field, { borderColor: theme.primary }]}> 
+                                <Text style={[styles.label, { color: theme.text }]}>Participants (max 10)</Text>
+                                <View style={styles.participantRow}>
+                                    <Pressable
+                                        onPress={() => {
+                                            const cur = Number(participants) || 1
+                                            const next = Math.max(1, cur - 1)
+                                            setParticipants(String(next))
+                                        }}
+                                        style={({ pressed }) => [styles.partButton, { backgroundColor: pressed ? theme.primary + '22' : 'transparent' }]}
+                                    >
+                                        <Text style={[styles.partButtonText, { color: theme.text }]}>-</Text>
+                                    </Pressable>
+
+                                    <View style={styles.partValueWrap}>
+                                        <Text style={[styles.partValue, { color: theme.text }]}>{String(participants)}</Text>
+                                        <Text style={[styles.partMax, { color: theme.text + '66' }]}>/10</Text>
+                                    </View>
+
+                                    <Pressable
+                                        onPress={() => {
+                                            const cur = Number(participants) || 1
+                                            const next = Math.min(10, cur + 1)
+                                            setParticipants(String(next))
+                                        }}
+                                        style={({ pressed }) => [styles.partButton, { backgroundColor: pressed ? theme.primary + '22' : 'transparent' }]}
+                                    >
+                                        <Text style={[styles.partButtonText, { color: theme.text }]}>+</Text>
+                                    </Pressable>
+                                </View>
+                            </View>
+
+                    <View style={[styles.field, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}> 
+                        <View>
+                            <Text style={[styles.label, { color: theme.text }]}>Private event</Text>
+                            <Text style={{ color: theme.text + '88', fontSize: 12 }}>Toggle to make event private and generate an invitation code.</Text>
+                        </View>
+                        <Switch value={isPrivate} onValueChange={setIsPrivate} trackColor={{ true: theme.accent }} />
+                    </View>
+
+                    {isPrivate && (
+                        <View style={[styles.field, { borderColor: theme.primary }]}> 
+                            <Text style={[styles.label, { color: theme.text }]}>Invitation code</Text>
+                            <Text style={[styles.input, { color: theme.text }]}>{inviteCode}</Text>
                         </View>
                     )}
-                </View>
 
-                        <View style={[styles.field, { borderColor: theme.primary }]}> 
-                            <Text style={[styles.label, { color: theme.text }]}>Participants (max 10)</Text>
-                            <View style={styles.participantRow}>
-                                <Pressable
-                                    onPress={() => {
-                                        const cur = Number(participants) || 1
-                                        const next = Math.max(1, cur - 1)
-                                        setParticipants(String(next))
-                                    }}
-                                    style={({ pressed }) => [styles.partButton, { backgroundColor: pressed ? theme.primary + '22' : 'transparent' }]}
-                                >
-                                    <Text style={[styles.partButtonText, { color: theme.text }]}>-</Text>
-                                </Pressable>
+                    <Pressable
+                        onPress={onSubmit}
+                        disabled={!user || submitting}
+                        style={({ pressed }) => [
+                            styles.button,
+                            { backgroundColor: user ? theme.accent : theme.primary + '66', opacity: pressed ? 0.8 : 1 },
+                        ]}
+                    >
+                        <Text style={{ color: '#fff', fontWeight: 'bold' }}>{submitting ? 'Saving...' : 'Create Event'}</Text>
+                    </Pressable>
 
-                                <View style={styles.partValueWrap}>
-                                    <Text style={[styles.partValue, { color: theme.text }]}>{String(participants)}</Text>
-                                    <Text style={[styles.partMax, { color: theme.text + '66' }]}>/10</Text>
-                                </View>
-
-                                <Pressable
-                                    onPress={() => {
-                                        const cur = Number(participants) || 1
-                                        const next = Math.min(10, cur + 1)
-                                        setParticipants(String(next))
-                                    }}
-                                    style={({ pressed }) => [styles.partButton, { backgroundColor: pressed ? theme.primary + '22' : 'transparent' }]}
-                                >
-                                    <Text style={[styles.partButtonText, { color: theme.text }]}>+</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-
-                <View style={[styles.field, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}> 
-                    <View>
-                        <Text style={[styles.label, { color: theme.text }]}>Private event</Text>
-                        <Text style={{ color: theme.text + '88', fontSize: 12 }}>Toggle to make event private and generate an invitation code.</Text>
-                    </View>
-                    <Switch value={isPrivate} onValueChange={setIsPrivate} trackColor={{ true: theme.accent }} />
-                </View>
-
-                {isPrivate && (
-                    <View style={[styles.field, { borderColor: theme.primary }]}> 
-                        <Text style={[styles.label, { color: theme.text }]}>Invitation code</Text>
-                        <Text style={[styles.input, { color: theme.text }]}>{inviteCode}</Text>
-                    </View>
-                )}
-
-                <Pressable
-                    onPress={onSubmit}
-                    disabled={!user || submitting}
-                    style={({ pressed }) => [
-                        styles.button,
-                        { backgroundColor: user ? theme.accent : theme.primary + '66', opacity: pressed ? 0.8 : 1 },
-                    ]}
-                >
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>{submitting ? 'Saving...' : 'Create Event'}</Text>
-                </Pressable>
-
-            </ScrollView>
-        </KeyboardAvoidingView>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     )
 }
 
