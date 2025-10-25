@@ -249,11 +249,17 @@ const Home = () => {
                   {currentEvent?.access === 'private' && !joinedEvents[currentEvent?.id] ? (
                     <TextInput
                       style={modalStyles.inviteInput}
-                      placeholder={isLoggedIn ? "Enter invite code" : "Login required"}
+                      placeholder={
+                        !isLoggedIn
+                          ? "Login required"
+                          : currentEvent?.participants && currentEvent.participants.current >= currentEvent.participants.max
+                          ? "Event full"
+                          : "Enter invite code"
+                      }
                       placeholderTextColor="#CCCCCC"
                       value={inviteCode}
                       onChangeText={setInviteCode}
-                      editable={isLoggedIn}
+                      editable={isLoggedIn && currentEvent?.participants && currentEvent.participants.current < currentEvent.participants.max}
                     />
                   ) : null}
 

@@ -1,15 +1,26 @@
-import { database, getAuthApp } from './firebaseConfig';
-import { ref, push, set, onValue, off, get } from 'firebase/database';
+import { db, getAuthApp } from './firebaseConfig';
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  getDoc,
+  getDocs,
+  runTransaction,
+  query,
+  where
+} from 'firebase/firestore';
 
-const EVENTS_REF = 'events';
-const JOINED_EVENTS_REF = 'joinedEvents';
+const EVENTS_COLLECTION = 'events';
+const USERS_COLLECTION = 'users';
 
 // Initialize seed events if database is empty (removed default events)
 export const initializeSeedEvents = async () => {
   try {
-    const eventsRef = ref(database, EVENTS_REF);
-    const snapshot = await get(eventsRef);
-    if (!snapshot.exists()) {
+    const eventsQuery = query(collection(db, EVENTS_COLLECTION));
+    const snapshot = await getDocs(eventsQuery);
+    if (snapshot.empty) {
       console.log('Database initialized - no seed events added');
     }
   } catch (error) {
@@ -17,14 +28,13 @@ export const initializeSeedEvents = async () => {
   }
 };
 
-// Save a new event to Firebase
+// Save a new event to Firestore
 export const saveEvent = async (eventData) => {
   try {
-    // Sanitize title to create a valid Firebase key
+    // Sanitize title to create a valid Firestore document ID
     const sanitizedTitle = eventData.title.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-    const eventsRef = ref(database, EVENTS_REF);
-    const newEventRef = ref(database, `${EVENTS_REF}/${sanitizedTitle}`);
-    await set(newEventRef, {
+    const eventDocRef = doc(db, EVENTS_COLLECTION, sanitizedTitle);
+    await setDoc(eventDocRef, {
       ...eventData,
       id: sanitizedTitle,
       createdAt: new Date().toISOString()
@@ -38,18 +48,13 @@ export const saveEvent = async (eventData) => {
 
 // Listen for real-time events updates
 export const subscribeToEvents = (callback) => {
-  const eventsRef = ref(database, EVENTS_REF);
-  const unsubscribe = onValue(eventsRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      const eventsArray = Object.keys(data).map(key => ({
-        ...data[key],
-        id: key
-      }));
-      callback(eventsArray);
-    } else {
-      callback([]);
-    }
+  const eventsCollection = collection(db, EVENTS_COLLECTION);
+  const unsubscribe = onSnapshot(eventsCollection, (snapshot) => {
+    const eventsArray = snapshot.docs.map(doc => ({
+      ...doc.data(),
+      id: doc.id
+    }));
+    callback(eventsArray);
   });
   return unsubscribe;
 };
@@ -57,8 +62,8 @@ export const subscribeToEvents = (callback) => {
 // Update an existing event (for joining/leaving)
 export const updateEvent = async (eventId, updates) => {
   try {
-    const eventRef = ref(database, `${EVENTS_REF}/${eventId}`);
-    await set(eventRef, updates);
+    const eventDocRef = doc(db, EVENTS_COLLECTION, eventId);
+    await updateDoc(eventDocRef, updates);
   } catch (error) {
     console.error('Error updating event:', error);
     throw error;
@@ -80,19 +85,14 @@ export const subscribeToJoinedEvents = (callback) => {
     return () => {}; // Return empty unsubscribe function
   }
 
-  const joinedRef = ref(database, `${JOINED_EVENTS_REF}/${userEmail}`);
-  const unsubscribe = onValue(joinedRef, (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      // Convert to readable format with event titles
-      const readableJoined = {};
-      Object.keys(data).forEach(eventId => {
-        readableJoined[eventId] = data[eventId];
-      });
-      callback(readableJoined);
-    } else {
-      callback({});
-    }
+  const userDocRef = doc(db, USERS_COLLECTION, userEmail);
+  const joinedCollection = collection(userDocRef, 'joinedEvents');
+  const unsubscribe = onSnapshot(joinedCollection, (snapshot) => {
+    const readableJoined = {};
+    snapshot.docs.forEach(doc => {
+      readableJoined[doc.id] = doc.data().joined || true;
+    });
+    callback(readableJoined);
   });
   return unsubscribe;
 };
@@ -100,32 +100,49 @@ export const subscribeToJoinedEvents = (callback) => {
 // Join an event for current user
 export const joinEvent = async (eventId) => {
   const userEmail = getCurrentUserEmail();
-  if (!userEmail) throw new Error('User not authenticated');
+  console.log('Join event attempt:', { eventId, userEmail });
+
+  if (!userEmail) {
+    console.error('User not authenticated');
+    throw new Error('User not authenticated');
+  }
 
   try {
-    // Get current event data
-    const eventRef = ref(database, `${EVENTS_REF}/${eventId}`);
-    const eventSnapshot = await get(eventRef);
-    if (!eventSnapshot.exists()) throw new Error('Event not found');
-
-    const eventData = eventSnapshot.val();
-    if (eventData.participants.current >= eventData.participants.max) {
-      throw new Error('Event is full');
-    }
-
-    // Update participants count
-    const updatedEvent = {
-      ...eventData,
-      participants: {
-        ...eventData.participants,
-        current: eventData.participants.current + 1
+    await runTransaction(db, async (transaction) => {
+      // Get current event data
+      const eventDocRef = doc(db, EVENTS_COLLECTION, eventId);
+      const eventSnapshot = await transaction.get(eventDocRef);
+      if (!eventSnapshot.exists()) {
+        console.error('Event not found:', eventId);
+        throw new Error('Event not found');
       }
-    };
-    await set(eventRef, updatedEvent);
 
-    // Add to joined events
-    const joinedRef = ref(database, `${JOINED_EVENTS_REF}/${userEmail}/${eventId}`);
-    await set(joinedRef, true);
+      const eventData = eventSnapshot.data();
+      console.log('Event data:', eventData);
+
+      if (eventData.participants.current >= eventData.participants.max) {
+        console.error('Event is full');
+        throw new Error('Event is full');
+      }
+
+      // Update participants count
+      const updatedEvent = {
+        ...eventData,
+        participants: {
+          ...eventData.participants,
+          current: eventData.participants.current + 1
+        }
+      };
+      transaction.update(eventDocRef, updatedEvent);
+
+      // Add to joined events
+      const userDocRef = doc(db, USERS_COLLECTION, userEmail);
+      const joinedDocRef = doc(userDocRef, 'joinedEvents', eventId);
+      transaction.set(joinedDocRef, { joined: true });
+
+      console.log('Transaction prepared successfully');
+    });
+    console.log('Join event successful');
   } catch (error) {
     console.error('Error joining event:', error);
     throw error;
@@ -138,27 +155,30 @@ export const leaveEvent = async (eventId) => {
   if (!userEmail) throw new Error('User not authenticated');
 
   try {
-    // Get current event data
-    const eventRef = ref(database, `${EVENTS_REF}/${eventId}`);
-    const eventSnapshot = await get(eventRef);
-    if (!eventSnapshot.exists()) throw new Error('Event not found');
+    await runTransaction(db, async (transaction) => {
+      // Get current event data
+      const eventDocRef = doc(db, EVENTS_COLLECTION, eventId);
+      const eventSnapshot = await transaction.get(eventDocRef);
+      if (!eventSnapshot.exists()) throw new Error('Event not found');
 
-    const eventData = eventSnapshot.val();
-    if (eventData.participants.current > 0) {
-      // Update participants count
-      const updatedEvent = {
-        ...eventData,
-        participants: {
-          ...eventData.participants,
-          current: eventData.participants.current - 1
-        }
-      };
-      await set(eventRef, updatedEvent);
-    }
+      const eventData = eventSnapshot.data();
+      if (eventData.participants.current > 0) {
+        // Update participants count
+        const updatedEvent = {
+          ...eventData,
+          participants: {
+            ...eventData.participants,
+            current: eventData.participants.current - 1
+          }
+        };
+        transaction.update(eventDocRef, updatedEvent);
+      }
 
-    // Remove from joined events
-    const joinedRef = ref(database, `${JOINED_EVENTS_REF}/${userEmail}/${eventId}`);
-    await set(joinedRef, null); // Remove the key
+      // Remove from joined events
+      const userDocRef = doc(db, USERS_COLLECTION, userEmail);
+      const joinedDocRef = doc(userDocRef, 'joinedEvents', eventId);
+      transaction.delete(joinedDocRef);
+    });
   } catch (error) {
     console.error('Error leaving event:', error);
     throw error;
