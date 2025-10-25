@@ -44,16 +44,82 @@ const Home = () => {
   const [inviteCode, setInviteCode] = useState('')
 
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [tick, setTick] = useState(0) // forces re-render for countdown
 
-  const parseDate = (mmddyyyy) => {
-    const [m, d, y] = mmddyyyy.split('/').map(Number)
-    return new Date(y, m - 1, d)
+  // parse "MM/DD/YYYY", "MM/DD/YYYY HH:MM", "MM/DD/YYYY HH:MM AM/PM" or ISO strings
+  const parseDate = (dateStr) => {
+    if (!dateStr) return new Date(0)
+    // if it's already an ISO-ish string that Date understands, use it
+    const isoLike = dateStr.includes('T') || dateStr.includes('-')
+    if (isoLike) {
+      const d = new Date(dateStr)
+      if (!isNaN(d)) return d
+    }
+
+    // split date and optional time
+    // allow extra spaces, e.g. "10/25/2025 02:00 PM"
+    const partsAll = dateStr.trim().split(/\s+/)
+    const datePart = partsAll[0] || ''
+    const timePart = partsAll.slice(1).join(' ') || ''
+    const parts = (datePart || '').split('/').map(Number)
+    if (parts.length === 3 && parts.every(p => !isNaN(p))) {
+      const [m, d, y] = parts
+      let hours = 0
+      let minutes = 0
+      if (timePart) {
+        // handle "HH:MM" or "HH:MMAM" / "HH:MM AM" with AM/PM
+        const t = timePart.trim()
+        const ampmMatch = t.match(/(am|pm)$/i)
+        const hasAMPM = !!ampmMatch
+        const timeOnly = hasAMPM ? t.replace(/(am|pm)$/i, '').trim() : t
+        const [hStr, minStr] = timeOnly.split(':').map(s => s && s.replace(/[^0-9]/g, ''))
+        hours = Number(hStr) || 0
+        minutes = Number(minStr) || 0
+        if (hasAMPM) {
+          const ampm = ampmMatch[0].toLowerCase()
+          if (ampm === 'pm' && hours < 12) hours += 12
+          if (ampm === 'am' && hours === 12) hours = 0
+        }
+      } else {
+        // No explicit time on date-only events: assume start at noon (12:00) to avoid marking same-day events as "Started"
+        // Adjust this default as needed (e.g. 18 for 6pm)
+        hours = 12
+        minutes = 0
+      }
+      return new Date(y, m - 1, d, hours, minutes, 0, 0)
+    }
+
+    // fallback to Date parser
+    const fallback = new Date(dateStr)
+    if (!isNaN(fallback)) return fallback
+    return new Date(0)
   }
 
-  const isSameDay = (a, b) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+  // helper: compare two Date objects for same calendar day
+  const isSameDay = (a, b) => {
+    if (!(a instanceof Date) || !(b instanceof Date)) return false
+    return a.getFullYear() === b.getFullYear()
+      && a.getMonth() === b.getMonth()
+      && a.getDate() === b.getDate()
+  }
+
+  // return a short human-friendly countdown string for a date/time string
+  const getTimeUntil = (dateStr) => {
+    try {
+      const target = parseDate(dateStr)
+      const now = new Date()
+      const diff = target.getTime() - now.getTime()
+      if (diff <= 0) return 'Started'
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      if (days > 0) return `${days}d ${hours}h`
+      if (hours > 0) return `${hours}h ${minutes}m`
+      return `${minutes}m`
+    } catch (e) {
+      return ''
+    }
+  }
 
   // Initialize Firebase listeners (seed events moved to auth callback)
   useEffect(() => {
@@ -102,6 +168,11 @@ const Home = () => {
     }
   }, []) // run once
 
+  // tick every 30s so countdown updates automatically
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
 
   const openEvent = (event) => {
     setSelectedEvent(event)
@@ -190,15 +261,33 @@ const Home = () => {
   }
 
   const renderItem = ({ item }) => (
-    <Pressable onPress={() => openEvent(item)}>
-      <EventCardLive
-        key={`${item.id}-${item.participants?.current}`}
-        title={item.title}
-        date={item.date}
-        tag={item.tag}
-        statusColor={getStatusColor(item)}
-        host={item.host}
-      />
+    <Pressable onPress={() => openEvent(item)} style={{ paddingVertical: 6 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {/* Event card takes most of the width */}
+        <View style={{ flex: 1 }}>
+          <EventCardLive
+            key={`${item.id}-${item.participants?.current}`}
+            title={item.title}
+            date={item.date}
+            tag={item.tag}
+            statusColor={getStatusColor(item)}
+            host={item.host}
+          />
+        </View>
+
+        {/* Countdown placed at the right */}
+        <View style={{ width: 84, alignItems: 'flex-end', marginLeft: 12 }}>
+          <Text style={{ fontSize: 12, color: '#E6F0FF', fontWeight: '600' }}>
+            {getTimeUntil(
+              item.datetime ||
+              (item.date && item.time ? `${item.date} ${item.time}` : null) ||
+              (item.date && item.startTime ? `${item.date} ${item.startTime}` : null) ||
+              item.date
+            )}
+          </Text>
+          <Text style={{ fontSize: 10, color: '#CFE3FF' }}>{/* optional label */}</Text>
+        </View>
+      </View>
     </Pressable>
   )
 
