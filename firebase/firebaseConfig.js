@@ -1,6 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs } from 'firebase/firestore/lite';
-import { getDatabase } from "firebase/database";
+import { getFirestore } from 'firebase/firestore';
 import { getAuth, initializeAuth, getReactNativePersistence } from "firebase/auth";
 // Optionally import the services that you want to use
 // import {...} from 'firebase/auth';
@@ -24,7 +23,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const database = getDatabase(app);
 
 // Initialize auth with React Native AsyncStorage persistence when available.
 // We attempt to add an optional encryption layer using expo-secure-store to
@@ -108,4 +106,4 @@ try {
   getAuthApp = getAuth(app);
 }
 
-export { app, db, database, getAuthApp };
+export { app, db, getAuthApp };
