@@ -55,13 +55,8 @@ const Home = () => {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
 
-  // Initialize Firebase listeners and seed events
+  // Initialize Firebase listeners (seed events moved to auth callback)
   useEffect(() => {
-    const init = async () => {
-      await initializeSeedEvents()
-    }
-    init()
-
     // Set up real-time listeners
     const unsubscribeEvents = subscribeToEvents((eventsData) => {
       setEvents(eventsData)
@@ -88,6 +83,8 @@ const Home = () => {
             // persist minimal user info for per-user keys
             await AsyncStorage.setItem('user', JSON.stringify({ email: u.email, displayName: u.displayName }))
             await AsyncStorage.setItem('userToken', 'loggedIn')
+            // Initialize seed events after authentication
+            await initializeSeedEvents()
           } else {
             setIsLoggedIn(false)
             setJoinedEvents({})
