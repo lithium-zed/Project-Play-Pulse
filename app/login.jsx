@@ -77,7 +77,7 @@ const Login = () => {
       />
       {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
-      <Button title="Log In" onPress={handleLogin} color={theme.accent} disabled={Boolean(emailError || passwordError || !email || !password)} />
+      <Button title="Log In" onPress={handleLogin} color={theme.accent} />
     </View>
   );
 };
