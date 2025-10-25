@@ -86,13 +86,10 @@ export const subscribeToJoinedEvents = (callback) => {
   }
 
   const userDocRef = doc(db, USERS_COLLECTION, userEmail);
-  const joinedCollection = collection(userDocRef, 'joinedEvents');
-  const unsubscribe = onSnapshot(joinedCollection, (snapshot) => {
-    const readableJoined = {};
-    snapshot.docs.forEach(doc => {
-      readableJoined[doc.id] = doc.data().joined || true;
-    });
-    callback(readableJoined);
+  const unsubscribe = onSnapshot(userDocRef, (docSnapshot) => {
+    const userData = docSnapshot.data();
+    const joinedEvents = userData?.joinedEvents || {};
+    callback(joinedEvents);
   });
   return unsubscribe;
 };
@@ -137,8 +134,10 @@ export const joinEvent = async (eventId) => {
 
       // Add to joined events
       const userDocRef = doc(db, USERS_COLLECTION, userEmail);
-      const joinedDocRef = doc(userDocRef, 'joinedEvents', eventId);
-      transaction.set(joinedDocRef, { joined: true });
+      const userSnapshot = await transaction.get(userDocRef);
+      const userData = userSnapshot.exists() ? userSnapshot.data() : {};
+      const updatedJoinedEvents = { ...userData.joinedEvents, [eventId]: true };
+      transaction.set(userDocRef, { ...userData, joinedEvents: updatedJoinedEvents }, { merge: true });
 
       console.log('Transaction prepared successfully');
     });
@@ -176,8 +175,13 @@ export const leaveEvent = async (eventId) => {
 
       // Remove from joined events
       const userDocRef = doc(db, USERS_COLLECTION, userEmail);
-      const joinedDocRef = doc(userDocRef, 'joinedEvents', eventId);
-      transaction.delete(joinedDocRef);
+      const userSnapshot = await transaction.get(userDocRef);
+      if (userSnapshot.exists()) {
+        const userData = userSnapshot.data();
+        const updatedJoinedEvents = { ...userData.joinedEvents };
+        delete updatedJoinedEvents[eventId];
+        transaction.update(userDocRef, { joinedEvents: updatedJoinedEvents });
+      }
     });
   } catch (error) {
     console.error('Error leaving event:', error);
