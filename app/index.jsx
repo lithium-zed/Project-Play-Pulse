@@ -321,7 +321,7 @@ const Home = () => {
           stickySectionHeadersEnabled={true}
         />
 
-        <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeEvent}>
+        <Modal visible={modalVisible} animationType="fade" transparent={true} onRequestClose={closeEvent}>
           <Pressable style={modalStyles.backdrop} onPress={handleBackdropPress} pointerEvents="box-none">
             {(() => {
               // Get the current event data from the events array to ensure real-time updates
