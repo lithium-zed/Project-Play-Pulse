@@ -18,6 +18,7 @@ import { Colors } from '../components/Colors'
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'
 import { getAuthApp } from '../firebase/firebaseConfig'
 import { onAuthStateChanged } from 'firebase/auth'
+import DateTimePicker from '@react-native-community/datetimepicker'
 import { saveEvent } from '../firebase/databaseUtils'
 
 const CATEGORIES = ['Yu-Gi-Oh', 'Magic the Gathering', 'BeybladeX', 'DnD', 'PokemonTCG', 'Misc']
@@ -29,24 +30,29 @@ function generateInvitationCode(len = 6) {
     return out
 }
 
-function daysInMonth(year, monthIndex) {
-    return new Date(year, monthIndex + 1, 0).getDate()
+function daysInMonth(year, month) {
+    // month: 1-12
+    return new Date(year, month, 0).getDate()
 }
 
 function countWords(s = '') {
     return s.trim().length === 0 ? 0 : s.trim().split(/\s+/).filter(Boolean).length
 }
 
-function formatDateFromParts(monthIdx, day, year) {
-    const mm = String(monthIdx + 1).padStart(2, '0')
-    const dd = String(day).padStart(2, '0')
-    return `${mm}/${dd}/${year}`
+function formatDateFromDate(d) {
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const yyyy = d.getFullYear()
+    return `${mm}/${dd}/${yyyy}`
 }
 
-function formatTimeFromParts(hour12, minute, ampm) {
-    const hh = String(hour12).padStart(2, '0')
-    const mm = String(minute).padStart(2, '0')
-    return `${hh}:${mm} ${ampm}`
+function formatTimeFromDate(d) {
+    const h = d.getHours()
+    const m = String(d.getMinutes()).padStart(2, '0')
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    let hour12 = h % 12
+    if (hour12 === 0) hour12 = 12
+    return `${String(hour12).padStart(2, '0')}:${m} ${ampm}`
 }
 
 const BookEvent = () => {
@@ -62,21 +68,11 @@ const BookEvent = () => {
     const [title, setTitle] = useState('')
     const [description, setDescription] = useState('')
 
-    // Date parts
-    const [month, setMonth] = useState(now.getMonth()) // 0-11
-    const [day, setDay] = useState(now.getDate())
-    const [year, setYear] = useState(now.getFullYear())
-    const [showMonthList, setShowMonthList] = useState(false)
-    const [showDayList, setShowDayList] = useState(false)
-    const [showYearList, setShowYearList] = useState(false)
-
-    // Time parts (12-hour)
-    const [hour, setHour] = useState(((now.getHours() + 11) % 12) + 1) // 1-12
-    const [minute, setMinute] = useState(String(Math.floor(now.getMinutes() / 5) * 5).padStart(2, '0'))
-    const [ampm, setAmpm] = useState(now.getHours() >= 12 ? 'PM' : 'AM')
-    const [showHourList, setShowHourList] = useState(false)
-    const [showMinuteList, setShowMinuteList] = useState(false)
-    const [showAmpmList, setShowAmpmList] = useState(false)
+    // selected datetime (single Date object)
+    const [date, setDate] = useState(now)
+    const [showDatePicker, setShowDatePicker] = useState(false)
+    const [showTimePicker, setShowTimePicker] = useState(false)
+    const [dateError, setDateError] = useState('')
 
     const [category, setCategory] = useState(CATEGORIES[0])
     const [showCategoryList, setShowCategoryList] = useState(false)
@@ -124,13 +120,16 @@ const BookEvent = () => {
             return
         }
 
+        // validate date/time inputs
+        if (!validateDateTime()) return
+
         setSubmitting(true)
         try {
             const newEvent = {
                 title: title.trim(),
                 description: description.trim(),
-                date: formatDateFromParts(month, day, year),
-                time: formatTimeFromParts(hour, minute, ampm),
+                date: formatDateFromDate(date),
+                time: formatTimeFromDate(date),
                 category,
                 participants: { current: 0, max: Number(participants) },
                 access: isPrivate ? 'private' : 'public',
@@ -149,6 +148,52 @@ const BookEvent = () => {
         } finally {
             setSubmitting(false)
         }
+    }
+
+    function validateDateTime() {
+        setDateError('')
+        if (!date || !(date instanceof Date)) {
+            setDateError('Please select a valid date and time')
+            return false
+        }
+        if (date.getTime() < new Date().getTime()) {
+            setDateError('Event must be in the future')
+            return false
+        }
+
+        // enforce store opening hours for the selected day
+        const { openMinutes, closeMinutes, label } = getStoreHoursForDate(date)
+        const minutes = date.getHours() * 60 + date.getMinutes()
+        if (minutes < openMinutes || minutes >= closeMinutes) {
+            const openH = Math.floor(openMinutes / 60)
+            const openM = String(openMinutes % 60).padStart(2, '0')
+            const closeH = Math.floor((closeMinutes % 1440) / 60)
+            const closeM = String(closeMinutes % 60).padStart(2, '0')
+            const openStr = formatTimeFromDate(new Date(date.getFullYear(), date.getMonth(), date.getDate(), openH, openM))
+            const closeStr = closeMinutes === 1440 ? '12:00 AM' : formatTimeFromDate(new Date(date.getFullYear(), date.getMonth(), date.getDate(), closeH, closeM))
+            setDateError(`Store hours on ${label}: ${openStr} – ${closeStr}`)
+            return false
+        }
+        return true
+    }
+
+    // returns store open/close in minutes since midnight and a weekday label
+    function getStoreHoursForDate(d) {
+        // weekday: 0 = Sunday, 6 = Saturday
+        const weekday = d.getDay()
+        // schedule mapping in minutes since midnight
+        // Sunday-Thursday: 12:00 (720) - 20:00 (1200)
+        // Friday-Saturday: 12:00 (720) - 24:00 (1440)
+        const schedule = {
+            0: { openMinutes: 12 * 60, closeMinutes: 20 * 60, label: 'Sunday' },
+            1: { openMinutes: 12 * 60, closeMinutes: 20 * 60, label: 'Monday' },
+            2: { openMinutes: 12 * 60, closeMinutes: 20 * 60, label: 'Tuesday' },
+            3: { openMinutes: 12 * 60, closeMinutes: 20 * 60, label: 'Wednesday' },
+            4: { openMinutes: 12 * 60, closeMinutes: 20 * 60, label: 'Thursday' },
+            5: { openMinutes: 12 * 60, closeMinutes: 24 * 60, label: 'Friday' },
+            6: { openMinutes: 12 * 60, closeMinutes: 24 * 60, label: 'Saturday' },
+        }
+        return schedule[weekday] || { openMinutes: 12 * 60, closeMinutes: 20 * 60, label: 'Day' }
     }
 
     return (
@@ -199,91 +244,83 @@ const BookEvent = () => {
                     <View style={styles.row}>
                         <View style={[styles.smallField, { borderColor: theme.primary }]}> 
                             <Text style={[styles.label, { color: theme.text }]}>Date</Text>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                <Pressable onPress={() => setShowMonthList(!showMonthList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                    <Text style={{ color: theme.text }}>{String(month + 1).padStart(2, '0')}</Text>
-                                </Pressable>
-                                <Pressable onPress={() => setShowDayList(!showDayList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                    <Text style={{ color: theme.text }}>{String(day).padStart(2, '0')}</Text>
-                                </Pressable>
-                                <Pressable onPress={() => setShowYearList(!showYearList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                    <Text style={{ color: theme.text }}>{year}</Text>
-                                </Pressable>
-                            </View>
-                            {showMonthList && (
-                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                    {Array.from({ length: 12 }).map((_, i) => (
-                                        <Pressable key={i} onPress={() => { setMonth(i); setShowMonthList(false) }} style={styles.dropdownItem}>
-                                            <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                            {showDayList && (
-                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                    {Array.from({ length: daysInMonth(year, month) }).map((_, i) => (
-                                        <Pressable key={i} onPress={() => { setDay(i + 1); setShowDayList(false) }} style={styles.dropdownItem}>
-                                            <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                            {showYearList && (
-                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                    {Array.from({ length: 3 }).map((_, i) => {
-                                        const y = now.getFullYear() + i
-                                        return (
-                                            <Pressable key={y} onPress={() => { setYear(y); setShowYearList(false) }} style={styles.dropdownItem}>
-                                                <Text style={{ color: theme.text }}>{y}</Text>
-                                            </Pressable>
-                                        )
-                                    })}
-                                </View>
+                            <Pressable onPress={() => setShowDatePicker(true)} style={[styles.picker, { backgroundColor: theme.primary + '11' }]}> 
+                                <Text style={{ color: theme.text }}>{formatDateFromDate(date)}</Text>
+                            </Pressable>
+                            {dateError ? <Text style={styles.dateError}>{dateError}</Text> : null}
+                            {showDatePicker && (
+                                <DateTimePicker
+                                    value={date}
+                                    mode="date"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={(e, selected) => {
+                                        setShowDatePicker(Platform.OS === 'ios')
+                                        if (selected) {
+                                            const newDate = new Date(date)
+                                            newDate.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate())
+                                            // clamp time to store hours for the selected day
+                                            const { openMinutes, closeMinutes } = getStoreHoursForDate(newDate)
+                                            const curMinutes = newDate.getHours() * 60 + newDate.getMinutes()
+                                            if (curMinutes < openMinutes) {
+                                                newDate.setHours(Math.floor(openMinutes / 60), openMinutes % 60)
+                                            } else if (curMinutes >= closeMinutes) {
+                                                const m = Math.max(openMinutes, closeMinutes - 1)
+                                                newDate.setHours(Math.floor(m / 60), m % 60)
+                                            }
+                                            setDate(newDate)
+                                        }
+                                    }}
+                                    minimumDate={new Date()}
+                                />
                             )}
                         </View>
 
                         <View style={[styles.smallField, { borderColor: theme.primary }]}> 
                             <Text style={[styles.label, { color: theme.text }]}>Time</Text>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                                <Pressable onPress={() => setShowHourList(!showHourList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                    <Text style={{ color: theme.text }}>{String(hour).padStart(2, '0')}</Text>
-                                </Pressable>
-                                <Pressable onPress={() => setShowMinuteList(!showMinuteList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                    <Text style={{ color: theme.text }}>{String(minute).padStart(2, '0')}</Text>
-                                </Pressable>
-                                <Pressable onPress={() => setShowAmpmList(!showAmpmList)} style={[styles.pickerInline, { padding: 8 }]}> 
-                                    <Text style={{ color: theme.text }}>{ampm}</Text>
-                                </Pressable>
-                            </View>
-                            {showHourList && (
-                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                    {Array.from({ length: 12 }).map((_, i) => (
-                                        <Pressable key={i} onPress={() => { setHour(i + 1); setShowHourList(false) }} style={styles.dropdownItem}>
-                                            <Text style={{ color: theme.text }}>{String(i + 1).padStart(2, '0')}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                            {showMinuteList && (
-                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                    {Array.from({ length: 12 }).map((_, i) => {
-                                        const m = String(i * 5).padStart(2, '0')
-                                        return (
-                                            <Pressable key={m} onPress={() => { setMinute(m); setShowMinuteList(false) }} style={styles.dropdownItem}>
-                                                <Text style={{ color: theme.text }}>{m}</Text>
-                                            </Pressable>
-                                        )
-                                    })}
-                                </View>
-                            )}
-                            {showAmpmList && (
-                                <View style={[styles.dropdown, { backgroundColor: theme.background, borderColor: theme.primary }]}> 
-                                    {['AM', 'PM'].map(a => (
-                                        <Pressable key={a} onPress={() => { setAmpm(a); setShowAmpmList(false) }} style={styles.dropdownItem}>
-                                            <Text style={{ color: theme.text }}>{a}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
+                            <Pressable onPress={() => {
+                                const newDate = new Date(date)
+                                const { openMinutes, closeMinutes } = getStoreHoursForDate(newDate)
+                                const curMinutes = newDate.getHours() * 60 + newDate.getMinutes()
+                                if (curMinutes < openMinutes) {
+                                    newDate.setHours(Math.floor(openMinutes / 60), openMinutes % 60)
+                                } else if (curMinutes >= closeMinutes) {
+                                    const m = Math.max(openMinutes, closeMinutes - 1)
+                                    newDate.setHours(Math.floor(m / 60), m % 60)
+                                }
+                                setDate(newDate)
+                                setDateError('')
+                                setShowTimePicker(true)
+                            }} style={[styles.picker, { backgroundColor: theme.primary + '11' }]}> 
+                                <Text style={{ color: theme.text }}>{formatTimeFromDate(date)}</Text>
+                            </Pressable>
+                            {showTimePicker && (
+                                <DateTimePicker
+                                    value={date}
+                                    mode="time"
+                                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                    onChange={(e, selected) => {
+                                        setShowTimePicker(Platform.OS === 'ios')
+                                        if (selected) {
+                                            const newDate = new Date(date)
+                                            newDate.setHours(selected.getHours(), selected.getMinutes())
+                                            // enforce store hours for this date
+                                            const { openMinutes, closeMinutes } = getStoreHoursForDate(newDate)
+                                            const selMinutes = newDate.getHours() * 60 + newDate.getMinutes()
+                                            if (selMinutes < openMinutes) {
+                                                newDate.setHours(Math.floor(openMinutes / 60), openMinutes % 60)
+                                                setDateError('Selected time is before store opening; adjusted to opening time')
+                                            } else if (selMinutes >= closeMinutes) {
+                                                const m = Math.max(openMinutes, closeMinutes - 1)
+                                                newDate.setHours(Math.floor(m / 60), m % 60)
+                                                setDateError('Selected time is after store closing; adjusted to last available time')
+                                            } else {
+                                                setDateError('')
+                                            }
+                                            setDate(newDate)
+                                        }
+                                    }}
+                                    minuteInterval={1}
+                                />
                             )}
                         </View>
                     </View>
@@ -395,4 +432,7 @@ const styles = StyleSheet.create({
     partValueWrap: { flexDirection: 'row', alignItems: 'baseline', paddingHorizontal: 8 },
     partValue: { fontSize: 16, minWidth: 28, textAlign: 'center' },
     partMax: { fontSize: 12, marginLeft: 6 },
+        smallInput: { paddingVertical: 8, paddingHorizontal: 6, fontSize: 16, minWidth: 56, textAlign: 'center', borderWidth: 1, borderRadius: 6, marginHorizontal: 4 },
+        ampmButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, borderWidth: 1, minWidth: 56, alignItems: 'center', justifyContent: 'center' },
+        dateError: { color: 'red', marginTop: 6, fontSize: 12 },
 })
