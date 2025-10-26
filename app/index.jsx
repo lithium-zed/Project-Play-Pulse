@@ -7,6 +7,7 @@ import {
   joinEvent as joinEventFirebase,
   leaveEvent as leaveEventFirebase,
   updateEvent,
+  deleteEvent,
   initializeSeedEvents
 } from '../firebase/databaseUtils'
 import {
@@ -44,7 +45,7 @@ const Home = () => {
   const [inviteCode, setInviteCode] = useState('')
 
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [tick, setTick] = useState(0) // forces re-render for countdown
+  
 
   // parse "MM/DD/YYYY", "MM/DD/YYYY HH:MM", "MM/DD/YYYY HH:MM AM/PM" or ISO strings
   const parseDate = (dateStr) => {
@@ -103,23 +104,6 @@ const Home = () => {
       && a.getDate() === b.getDate()
   }
 
-  // return a short human-friendly countdown string for a date/time string
-  const getTimeUntil = (dateStr) => {
-    try {
-      const target = parseDate(dateStr)
-      const now = new Date()
-      const diff = target.getTime() - now.getTime()
-      if (diff <= 0) return 'Started'
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-      if (days > 0) return `${days}d ${hours}h`
-      if (hours > 0) return `${hours}h ${minutes}m`
-      return `${minutes}m`
-    } catch (e) {
-      return ''
-    }
-  }
 
   // Initialize Firebase listeners (seed events moved to auth callback)
   useEffect(() => {
@@ -168,11 +152,7 @@ const Home = () => {
     }
   }, []) // run once
 
-  // tick every 30s so countdown updates automatically
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 30000)
-    return () => clearInterval(id)
-  }, [])
+  
 
   const openEvent = (event) => {
     setSelectedEvent(event)
@@ -275,18 +255,7 @@ const Home = () => {
           />
         </View>
 
-        {/* Countdown placed at the right */}
-        <View style={{ width: 84, alignItems: 'flex-end', marginLeft: 12 }}>
-          <Text style={{ fontSize: 12, color: '#E6F0FF', fontWeight: '600' }}>
-            {getTimeUntil(
-              item.datetime ||
-              (item.date && item.time ? `${item.date} ${item.time}` : null) ||
-              (item.date && item.startTime ? `${item.date} ${item.startTime}` : null) ||
-              item.date
-            )}
-          </Text>
-          <Text style={{ fontSize: 10, color: '#CFE3FF' }}>{/* optional label */}</Text>
-        </View>
+        {/* countdown removed */}
       </View>
     </Pressable>
   )
@@ -332,7 +301,7 @@ const Home = () => {
                     <View style={[modalStyles.statusDot, { backgroundColor: currentEvent ? getStatusColor(currentEvent) : '#34C759' }]} />
                     <Text style={modalStyles.title}>{currentEvent?.title}</Text>
                   </View>
-                  <Text style={modalStyles.meta}>{currentEvent?.date} • {currentEvent?.host}</Text>
+                  <Text style={modalStyles.meta}>{currentEvent?.date} • {currentEvent?.time ?? currentEvent?.startTime ?? ''} • {currentEvent?.host}</Text>
                   {currentEvent?.description ? <Text style={modalStyles.desc}>{currentEvent.description}</Text> : null}
                   {currentEvent?.participants ? <Text style={modalStyles.participants}>Participants {currentEvent.participants.current}/{currentEvent.participants.max}</Text> : null}
                   {currentEvent?.access === 'private' && !joinedEvents[currentEvent?.id] ? (
@@ -353,22 +322,73 @@ const Home = () => {
                   ) : null}
 
                   <View style={modalStyles.buttonsRow}>
-                    {isLoggedIn && joinedEvents[currentEvent?.id] ? (
-                      <TouchableOpacity style={modalStyles.leaveBtn} onPress={leaveEvent}>
-                        <Text style={modalStyles.leaveBtnText}>Leave</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={[modalStyles.joinBtn, (!currentEvent?.participants || currentEvent.participants.current >= currentEvent.participants.max || !isLoggedIn) && modalStyles.disabledButton]}
-                        onPress={joinEvent}
-                        disabled={!currentEvent?.participants || currentEvent.participants.current >= currentEvent.participants.max || !isLoggedIn}
-                      >
-                        <Text style={modalStyles.joinBtnText}>Join</Text>
-                      </TouchableOpacity>
-                    )}
-                    <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
-                      <Text style={modalStyles.closeBtnText}>Close</Text>
-                    </TouchableOpacity>
+                    {(() => {
+                      try {
+                        const auth = typeof getAuthApp === 'function' ? getAuthApp() : getAuthApp
+                        const cu = auth?.currentUser
+                        const isHost = cu && (cu.email === currentEvent?.host || cu.displayName === currentEvent?.host)
+                        if (isHost) {
+                          // Host sees End Event and Close
+                          return (
+                            <>
+                              <TouchableOpacity style={modalStyles.endBtn} onPress={() => {
+                                // confirm before deleting event
+                                Alert.alert(
+                                  'End Event',
+                                  'Are you sure you want to end and remove this event? This cannot be undone.',
+                                  [
+                                    { text: 'Cancel', style: 'cancel' },
+                                    { text: 'End Event', style: 'destructive', onPress: async () => {
+                                        try {
+                                          await deleteEvent(currentEvent.id)
+                                          Alert.alert('Ended', 'Event has been ended and removed.')
+                                          closeEvent()
+                                        } catch (err) {
+                                          console.error('Failed to delete event', err)
+                                          Alert.alert('Error', 'Failed to end event. Try again.')
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  { cancelable: true }
+                                )
+                              }}>
+                                <Text style={modalStyles.endBtnText}>End Event</Text>
+                              </TouchableOpacity>
+
+                              <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
+                                <Text style={modalStyles.closeBtnText}>Close</Text>
+                              </TouchableOpacity>
+                            </>
+                          )
+                        }
+                      } catch (e) {
+                        console.warn('Error checking host', e)
+                      }
+
+                      // Non-host users: show Join/Leave and Close
+                      return (
+                        <>
+                          {isLoggedIn && joinedEvents[currentEvent?.id] ? (
+                            <TouchableOpacity style={modalStyles.leaveBtn} onPress={leaveEvent}>
+                              <Text style={modalStyles.leaveBtnText}>Leave</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              style={[modalStyles.joinBtn, (!currentEvent?.participants || currentEvent.participants.current >= currentEvent.participants.max || !isLoggedIn) && modalStyles.disabledButton]}
+                              onPress={joinEvent}
+                              disabled={!currentEvent?.participants || currentEvent.participants.current >= currentEvent.participants.max || !isLoggedIn}
+                            >
+                              <Text style={modalStyles.joinBtnText}>Join</Text>
+                            </TouchableOpacity>
+                          )}
+
+                          <TouchableOpacity style={modalStyles.closeBtn} onPress={closeEvent}>
+                            <Text style={modalStyles.closeBtnText}>Close</Text>
+                          </TouchableOpacity>
+                        </>
+                      )
+                    })()}
                   </View>
                 </View>
               );
@@ -499,6 +519,20 @@ const modalStyles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 16
+  },
+  endBtn: {
+    backgroundColor: '#FFCC00',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  endBtnText: {
+    color: '#1e1e1e',
+    fontWeight: '700',
+    fontSize: 14
   },
   disabledButton: {
     opacity: 0.5

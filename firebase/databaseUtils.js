@@ -7,6 +7,7 @@ import {
   onSnapshot,
   getDoc,
   getDocs,
+  deleteDoc,
   runTransaction,
   query,
   where,
@@ -253,5 +254,16 @@ export async function joinEventTransaction(eventId, userIdOrEmail) {
   } catch (err) {
     console.error('joinEventTransaction error', err);
     return { ok: false, error: err.message || err };
+  }
+}
+
+// Delete an event document
+export const deleteEvent = async (eventId) => {
+  try {
+    const eventDocRef = doc(db, EVENTS_COLLECTION, eventId)
+    await deleteDoc(eventDocRef)
+  } catch (error) {
+    console.error('Error deleting event:', error)
+    throw error
   }
 }
