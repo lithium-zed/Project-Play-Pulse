@@ -82,7 +82,7 @@ export default function FooterNav() {
         </TouchableOpacity>
 
         {/* TEMP: quick debug route button for development */}
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.button}
           onPress={() => navigate('/debug') }
           accessibilityLabel="Debug"
@@ -93,7 +93,7 @@ export default function FooterNav() {
             size={20}
             color={theme.text}
           />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
 
       </View>
     </SafeAreaView>
