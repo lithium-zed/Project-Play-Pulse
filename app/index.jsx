@@ -196,6 +196,8 @@ const Home = () => {
 
     try {
       await joinEventFirebase(selectedEvent.id)
+      // Optimistically update local joinedEvents so UI updates while Firestore snapshot syncs
+      setJoinedEvents(prev => ({ ...(prev || {}), [selectedEvent.id]: true }))
       Alert.alert('Joined', 'You have successfully joined the event!')
     } catch (error) {
       console.error('Error joining event:', error)
@@ -218,6 +220,12 @@ const Home = () => {
 
     try {
       await leaveEventFirebase(selectedEvent.id)
+      // Optimistically remove from local joinedEvents so UI updates immediately
+      setJoinedEvents(prev => {
+        const copy = { ...(prev || {}) }
+        delete copy[selectedEvent.id]
+        return copy
+      })
       Alert.alert('Left', 'You have successfully left the event!')
     } catch (error) {
       console.error('Error leaving event:', error)
